@@ -365,10 +365,17 @@ function handleLogout() {
     const statusBadge = document.getElementById('wallet-status-badge');
     const linkedView = document.getElementById('wallet-linked-view');
     const unlinkedView = document.getElementById('wallet-unlinked-view');
-    linkedView.classList.add('hidden');
-    unlinkedView.classList.remove('hidden');
-    statusBadge.innerText = "Disconnected";
-    statusBadge.className = "wallet-status disconnected";
+    if (linkedView) linkedView.classList.add('hidden');
+    if (unlinkedView) unlinkedView.classList.remove('hidden');
+    if (statusBadge) {
+        statusBadge.innerText = "Disconnected";
+        statusBadge.className = "wallet-status disconnected";
+    }
+    const connectBtn = document.getElementById('wallet-connect-btn');
+    if (connectBtn) {
+        connectBtn.innerText = "⚡ Connect Wallet";
+        connectBtn.disabled = false;
+    }
 
     document.getElementById('auth-screen').classList.add('active');
     document.getElementById('dashboard-screen').classList.add('hidden');
@@ -463,9 +470,12 @@ async function updateWalletBalance(tag) {
     const unlinkedView = document.getElementById('wallet-unlinked-view');
     const tagDisplay = document.getElementById('wallet-tag');
     const balanceDisplay = document.getElementById('wallet-balance');
+    const connectBtn = document.getElementById('wallet-connect-btn');
 
-    statusBadge.innerText = "Connecting...";
-    statusBadge.className = "wallet-status disconnected";
+    if (statusBadge) {
+        statusBadge.innerText = "Connecting...";
+        statusBadge.className = "wallet-status disconnected";
+    }
 
     try {
         if (typeof logNetworkRequest === "function") {
@@ -483,10 +493,16 @@ async function updateWalletBalance(tag) {
             tagDisplay.innerText = data.tag;
             balanceDisplay.innerText = `${data.balance.toLocaleString()} ALUMNI`;
             
-            unlinkedView.classList.add('hidden');
-            linkedView.classList.remove('hidden');
-            statusBadge.innerText = "Connected";
-            statusBadge.className = "wallet-status connected";
+            if (unlinkedView) unlinkedView.classList.add('hidden');
+            if (linkedView) linkedView.classList.remove('hidden');
+            if (statusBadge) {
+                statusBadge.innerText = "Connected";
+                statusBadge.className = "wallet-status connected";
+            }
+            if (connectBtn) {
+                connectBtn.innerText = "Connected";
+                connectBtn.disabled = true;
+            }
             
             if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
                 window.AlumniMailDB.auditLog("L1 BALANCE", `L1 balance verified: Tag '${data.tag}' has ${data.balance.toLocaleString()} ALUMNI.`);
@@ -496,8 +512,10 @@ async function updateWalletBalance(tag) {
         }
     } catch (err) {
         console.error("L1 Node Connection Error:", err);
-        statusBadge.innerText = "RPC Error";
-        statusBadge.className = "wallet-status disconnected";
+        if (statusBadge) {
+            statusBadge.innerText = "RPC Error";
+            statusBadge.className = "wallet-status disconnected";
+        }
     }
 }
 
@@ -507,11 +525,18 @@ function unlinkWallet() {
     const statusBadge = document.getElementById('wallet-status-badge');
     const linkedView = document.getElementById('wallet-linked-view');
     const unlinkedView = document.getElementById('wallet-unlinked-view');
+    const connectBtn = document.getElementById('wallet-connect-btn');
 
-    linkedView.classList.add('hidden');
-    unlinkedView.classList.remove('hidden');
-    statusBadge.innerText = "Disconnected";
-    statusBadge.className = "wallet-status disconnected";
+    if (linkedView) linkedView.classList.add('hidden');
+    if (unlinkedView) unlinkedView.classList.remove('hidden');
+    if (statusBadge) {
+        statusBadge.innerText = "Disconnected";
+        statusBadge.className = "wallet-status disconnected";
+    }
+    if (connectBtn) {
+        connectBtn.innerText = "⚡ Connect Wallet";
+        connectBtn.disabled = false;
+    }
     
     if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
         window.AlumniMailDB.auditLog("L1 UNLINK", `Unlinked Alumni PEM Wallet from email ${session.username}.`);
