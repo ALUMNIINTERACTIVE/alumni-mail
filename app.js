@@ -518,6 +518,83 @@ function unlinkWallet() {
     }
 }
 
+function openSendTokensModal() {
+    document.getElementById('send-tokens-modal').classList.remove('hidden');
+    document.getElementById('send-tokens-form').reset();
+    document.getElementById('send-tokens-error').classList.add('hidden');
+    document.getElementById('send-tokens-success').classList.add('hidden');
+}
+
+function closeSendTokensModal() {
+    document.getElementById('send-tokens-modal').classList.add('hidden');
+}
+
+async function handleSendTokens(event) {
+    event.preventDefault();
+    const recipient = document.getElementById('send-recipient-input').value.trim();
+    const amount = document.getElementById('send-amount-input').value.trim();
+    const errorDisplay = document.getElementById('send-tokens-error');
+    const successDisplay = document.getElementById('send-tokens-success');
+
+    errorDisplay.classList.add('hidden');
+    successDisplay.classList.add('hidden');
+
+    const fromTag = localStorage.getItem(`wallet_tag_${session.username}`);
+    if (!fromTag) {
+        errorDisplay.innerText = "No wallet linked to current session.";
+        errorDisplay.classList.remove('hidden');
+        return;
+    }
+
+    try {
+        if (typeof logNetworkRequest === "function") {
+            logNetworkRequest("POST", "/api/v1/wallet/send", {
+                fromEmail: session.username,
+                fromTag: fromTag,
+                recipient: recipient,
+                amount: amount
+            });
+        }
+
+        const response = await fetch('/api/v1/wallet/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fromEmail: session.username,
+                fromTag: fromTag,
+                recipient: recipient,
+                amount: amount
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            successDisplay.innerText = `Transaction Success! Hash: ${data.txHash}`;
+            successDisplay.classList.remove('hidden');
+
+            if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
+                window.AlumniMailDB.auditLog("L1 TRANSFER", `Signed Tx Broadcast: Sent ${amount} ALUMNI to ${recipient}. TxHash: ${data.txHash}`);
+            }
+
+            // Refresh balance state
+            setTimeout(async () => {
+                await updateWalletBalance(fromTag);
+            }, 800);
+
+            // Close after brief delay
+            setTimeout(() => {
+                closeSendTokensModal();
+            }, 2000);
+        } else {
+            throw new Error(data.error || "L1 transfer failed.");
+        }
+    } catch (err) {
+        console.error("L1 Transfer Error:", err);
+        errorDisplay.innerText = err.message || "Failed to broadcast transaction.";
+        errorDisplay.classList.remove('hidden');
+    }
+}
+
 function loadLinkedWallet() {
     const savedTag = localStorage.getItem(`wallet_tag_${session.username}`);
     if (savedTag) {

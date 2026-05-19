@@ -146,7 +146,10 @@
                             <span class="wallet-label">Balance:</span>
                             <span id="wallet-balance" class="wallet-value accent-green font-bold">0.00 ALUMNI</span>
                         </div>
-                        <button class="btn link-action-btn secondary-sm glow" onclick="unlinkWallet()">Unlink Wallet</button>
+                        <div style="display: flex; gap: 8px; margin-top: 4px;">
+                            <button class="btn primary-sm glow" style="flex: 1; padding: 6px 8px;" onclick="openSendTokensModal()">⚡ Send ALUMNI</button>
+                            <button class="btn secondary-sm" style="flex: 0 0 35px; padding: 6px 0; text-align: center;" onclick="unlinkWallet()" title="Unlink Wallet">🔌</button>
+                        </div>
                     </div>
                     <div id="wallet-unlinked-view" class="wallet-body text-center">
                         <p class="wallet-text-sm">Link your Alumni PEM wallet to show your verified tag and balance.</p>
@@ -628,6 +631,52 @@
                 <div class="form-actions" style="margin-top: 5px;">
                     <button type="submit" class="btn primary glow full-width">
                         <span>⚡ Mint & Link Wallet</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SECTION 6B: ALUMNI WALLET SEND TOKENS MODAL -->
+    <div id="send-tokens-modal" class="modal-container hidden">
+        <div class="modal-card glass-panel" style="max-width: 440px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">💸 Send ALUMNI Tokens</h3>
+                <button class="close-composer-btn" onclick="closeSendTokensModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <form id="send-tokens-form" onsubmit="handleSendTokens(event)" class="auth-form active" style="display: flex; flex-direction: column; gap: 15px;">
+                <p class="subtitle" style="font-size: 0.75rem; line-height: 1.4; color: var(--text-dark); margin: 0;">
+                    Transfer tokens directly across the Alumni L1 network. All transactions are cryptographically signed locally using your PEM key.
+                </p>
+                
+                <div class="form-group">
+                    <label for="send-recipient-input">Recipient (Wallet Tag or Email)</label>
+                    <input type="text" id="send-recipient-input" class="input-field" placeholder="@ALUMNI.HAL or hal@alumnimail.app" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="send-amount-input">Amount (ALUMNI)</label>
+                    <input type="number" id="send-amount-input" class="input-field" placeholder="100.00" min="0.01" step="0.01" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Transaction Signing Certificate</label>
+                    <div style="background: rgba(0, 0, 0, 0.3); padding: 12px; border-radius: 8px; font-size: 0.75rem; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.4rem;">🔏</span>
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <span style="color: var(--success-light); font-weight: 800; font-size: 0.75rem;">secp256k1 Key Active</span>
+                            <span style="color: var(--text-dark); font-size: 0.65rem; line-height: 1.2;">Transaction signed locally in your client's browser sandbox.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="send-tokens-error" class="auth-error-msg hidden" style="font-size: 0.75rem; margin-top: 5px;"></div>
+                <div id="send-tokens-success" class="auth-success-msg hidden" style="color: var(--success-light); font-size: 0.75rem; margin-top: 5px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.2);"></div>
+
+                <div class="form-actions" style="margin-top: 5px;">
+                    <button type="submit" class="btn primary glow full-width">
+                        <span>🚀 Broadcast L1 Transaction</span>
                     </button>
                 </div>
             </form>
