@@ -425,9 +425,19 @@ app.post('/api/mail/send', async (req, res) => {
             `;
         }
 
+        // Parse friendly display name dynamically from sender address
+        const senderUsername = normSender.split('@')[0];
+        const displayName = senderUsername.charAt(0).toUpperCase() + senderUsername.slice(1);
+        
+        // AWS SES allows sending from any address matching the verified domain!
+        let fromHeader = `"${displayName} via Alumni Mail" <support@alumnimail.app>`;
+        if (normSender.endsWith('@alumnimail.app')) {
+            fromHeader = `"${displayName}" <${normSender}>`;
+        }
+
         // Transmit via Nodemailer
         const mailOptions = {
-            from: process.env.SMTP_FROM || `"Alumni Mail Portal" <${transporter.options.auth.user}>`,
+            from: fromHeader,
             to: normRecipient,
             subject: emailSubject,
             html: emailHtml
