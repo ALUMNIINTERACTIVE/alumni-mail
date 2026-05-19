@@ -343,6 +343,7 @@ function enterMailbox() {
     switchView('inbox');
     renderUnreadBadges();
     renderDomainsCount();
+    loadLinkedWallet();
 }
 
 function handleLogout() {
@@ -360,8 +361,131 @@ function handleLogout() {
     document.getElementById('mem-privkey-val').innerText = "Key locked. Please log in.";
     document.getElementById('mem-domains-val').innerText = "No custom domains verified.";
 
+    // Unlink wallet visual state on logout
+    const statusBadge = document.getElementById('wallet-status-badge');
+    const linkedView = document.getElementById('wallet-linked-view');
+    const unlinkedView = document.getElementById('wallet-unlinked-view');
+    linkedView.classList.add('hidden');
+    unlinkedView.classList.remove('hidden');
+    statusBadge.innerText = "Disconnected";
+    statusBadge.className = "wallet-status disconnected";
+
     document.getElementById('auth-screen').classList.add('active');
     document.getElementById('dashboard-screen').classList.add('hidden');
+}
+
+// -------------------------------------------------------------
+// ALUMNI L1 BLOCKCHAIN WALLET INTEGRATION
+// -------------------------------------------------------------
+function triggerWalletUpload() {
+    document.getElementById('wallet-file-input').click();
+}
+
+async function processWalletFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        const fileContent = e.target.result;
+        
+        // Verify standard private key structures inside PEM text
+        if (!fileContent.includes("-----BEGIN PRIVATE KEY-----") && 
+            !fileContent.includes("-----BEGIN RSA PRIVATE KEY-----") && 
+            !fileContent.includes("-----BEGIN CERTIFICATE-----") && 
+            !fileContent.includes("-----BEGIN PUBLIC KEY-----")) {
+            alert("Invalid PEM file! Please upload your verified Alumni PEM Wallet key.");
+            return;
+        }
+
+        // Generate a deterministic wallet tag based on file content string
+        let tag = "ALUMNI_";
+        try {
+            let hash = 0;
+            for (let i = 0; i < fileContent.length; i++) {
+                const char = fileContent.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            tag += Math.abs(hash).toString(16).toUpperCase();
+        } catch (err) {
+            tag += "GENESIS_KEY";
+        }
+
+        localStorage.setItem(`wallet_tag_${session.username}`, tag);
+        await updateWalletBalance(tag);
+    };
+    reader.readAsText(file);
+}
+
+async function updateWalletBalance(tag) {
+    const statusBadge = document.getElementById('wallet-status-badge');
+    const linkedView = document.getElementById('wallet-linked-view');
+    const unlinkedView = document.getElementById('wallet-unlinked-view');
+    const tagDisplay = document.getElementById('wallet-tag');
+    const balanceDisplay = document.getElementById('wallet-balance');
+
+    statusBadge.innerText = "Connecting...";
+    statusBadge.className = "wallet-status disconnected";
+
+    try {
+        if (typeof logNetworkRequest === "function") {
+            logNetworkRequest("POST", "/api/v1/wallet/balance", { tag: tag, email: session.username });
+        }
+
+        const response = await fetch(`/api/v1/wallet/balance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag: tag, email: session.username })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            tagDisplay.innerText = data.tag;
+            balanceDisplay.innerText = `${data.balance.toLocaleString()} ALUMNI`;
+            
+            unlinkedView.classList.add('hidden');
+            linkedView.classList.remove('hidden');
+            statusBadge.innerText = "Connected";
+            statusBadge.className = "wallet-status connected";
+            
+            if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
+                window.AlumniMailDB.auditLog("L1 BALANCE", `L1 balance verified: Tag '${data.tag}' has ${data.balance.toLocaleString()} ALUMNI.`);
+            }
+        } else {
+            throw new Error(data.error || "Failed to retrieve balance");
+        }
+    } catch (err) {
+        console.error("L1 Node Connection Error:", err);
+        statusBadge.innerText = "RPC Error";
+        statusBadge.className = "wallet-status disconnected";
+    }
+}
+
+function unlinkWallet() {
+    localStorage.removeItem(`wallet_tag_${session.username}`);
+    
+    const statusBadge = document.getElementById('wallet-status-badge');
+    const linkedView = document.getElementById('wallet-linked-view');
+    const unlinkedView = document.getElementById('wallet-unlinked-view');
+
+    linkedView.classList.add('hidden');
+    unlinkedView.classList.remove('hidden');
+    statusBadge.innerText = "Disconnected";
+    statusBadge.className = "wallet-status disconnected";
+    
+    if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
+        window.AlumniMailDB.auditLog("L1 UNLINK", `Unlinked Alumni PEM Wallet from email ${session.username}.`);
+    }
+}
+
+function loadLinkedWallet() {
+    const savedTag = localStorage.getItem(`wallet_tag_${session.username}`);
+    if (savedTag) {
+        updateWalletBalance(savedTag);
+    } else {
+        unlinkWallet();
+    }
 }
 
 // -------------------------------------------------------------

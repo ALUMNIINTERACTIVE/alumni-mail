@@ -131,6 +131,32 @@
                     </div>
                 </div>
 
+                <!-- ALUMNI L1 BLOCKCHAIN WALLET WIDGET -->
+                <div class="wallet-widget">
+                    <div class="wallet-header">
+                        <span class="wallet-title">🔗 ALUMNI WALLET</span>
+                        <span id="wallet-status-badge" class="wallet-status disconnected">Disconnected</span>
+                    </div>
+                    <div id="wallet-linked-view" class="wallet-body hidden">
+                        <div class="wallet-tag-row">
+                            <span class="wallet-label">Tag:</span>
+                            <span id="wallet-tag" class="wallet-value font-mono">None</span>
+                        </div>
+                        <div class="wallet-balance-row">
+                            <span class="wallet-label">Balance:</span>
+                            <span id="wallet-balance" class="wallet-value accent-green font-bold">0.00 ALUMNI</span>
+                        </div>
+                        <button class="btn link-action-btn secondary-sm glow" onclick="unlinkWallet()">Unlink Wallet</button>
+                    </div>
+                    <div id="wallet-unlinked-view" class="wallet-body text-center">
+                        <p class="wallet-text-sm">Link your Alumni PEM wallet to show your verified tag and balance.</p>
+                        <button class="btn link-btn primary-sm glow full-width" onclick="triggerWalletUpload()">
+                            ⚡ Link PEM Wallet
+                        </button>
+                        <input type="file" id="wallet-file-input" class="hidden" accept=".pem" onchange="processWalletFile(event)">
+                    </div>
+                </div>
+
                 <button class="btn primary compose-btn glow" onclick="openComposer()">
                     <span class="btn-icon">➕</span> Compose Secure Mail
                 </button>

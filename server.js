@@ -503,6 +503,60 @@ app.post('/api/mail/delete/:emailId', (req, res) => {
     res.json({ success: true });
 });
 
+app.post('/api/v1/wallet/balance', async (req, res) => {
+    const { tag, email } = req.body;
+    if (!tag) {
+        return res.status(400).json({ error: "Missing wallet tag parameter." });
+    }
+
+    // Log the transaction attempt to the SQL auditor
+    auditLog("SELECT", `SELECT balance, tag FROM L1_ledger_state WHERE wallet_tag = '${tag}' AND associated_email = '${email}';`);
+
+    const L1_RPC_URL = process.env.L1_RPC_URL;
+    
+    if (L1_RPC_URL) {
+        try {
+            // Relaying query to the live custom JSON/HTTP L1 node API
+            const rpcResponse = await fetch(`${L1_RPC_URL}/api/wallet/query`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag, email }),
+                timeout: 3000
+            });
+            const l1Data = await rpcResponse.json();
+            
+            return res.json({
+                success: true,
+                tag: tag,
+                balance: l1Data.balance || 0,
+                l1_status: "LIVE_LEDGER"
+            });
+        } catch (err) {
+            console.error("[L1 RPC CONNECTION ERROR] Live blockchain API query failed:", err.message);
+        }
+    }
+
+    // SIMULATION FALLBACK (Robust demo mode when offline or L1 URL is unset)
+    let simulatedBalance = 2500;
+    try {
+        let numericHash = 0;
+        for (let i = 0; i < tag.length; i++) {
+            numericHash += tag.charCodeAt(i);
+        }
+        simulatedBalance = (numericHash * 23) % 25000 + 100;
+    } catch (e) {}
+
+    // Emulate node network round-trip handshake latency (120ms)
+    await new Promise(resolve => setTimeout(resolve, 120));
+
+    res.json({
+        success: true,
+        tag: tag,
+        balance: simulatedBalance,
+        l1_status: "OFFLINE_SIMULATION"
+    });
+});
+
 app.get('/api/logs', (req, res) => {
     const db = loadDB();
     res.json({ logs: db.logs });

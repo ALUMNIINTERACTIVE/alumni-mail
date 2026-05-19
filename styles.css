@@ -1584,3 +1584,108 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* -----------------------------------------
+   ALUMNI L1 BLOCKCHAIN WALLET WIDGET
+   ----------------------------------------- */
+.wallet-widget {
+    background: rgba(6, 9, 19, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.3s ease;
+}
+.wallet-widget:hover {
+    border-color: rgba(37, 99, 235, 0.3);
+    box-shadow: 0 4px 25px rgba(37, 99, 235, 0.15);
+}
+.wallet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
+}
+.wallet-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+.wallet-status {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.wallet-status.disconnected {
+    background: rgba(244, 63, 94, 0.12);
+    color: var(--danger);
+    border: 1px solid rgba(244, 63, 94, 0.2);
+}
+.wallet-status.connected {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--success-light);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+}
+.wallet-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.8rem;
+}
+.wallet-text-sm {
+    font-size: 0.7rem;
+    color: var(--text-dark);
+    line-height: 1.4;
+    margin-bottom: 4px;
+}
+.wallet-tag-row, .wallet-balance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+}
+.wallet-label {
+    color: var(--text-dark);
+    font-size: 0.75rem;
+}
+.wallet-value {
+    color: var(--text-main);
+    font-size: 0.8rem;
+}
+.wallet-value.accent-green {
+    color: var(--success-light);
+    text-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+.primary-sm {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    background: var(--accent);
+    color: white;
+}
+.primary-sm:hover {
+    background: #1d4ed8;
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+.secondary-sm {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+.secondary-sm:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+.link-action-btn {
+    margin-top: 6px;
+    width: 100%;
+}
