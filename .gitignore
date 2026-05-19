@@ -15,6 +15,9 @@ yarn-error.log*
 .pnpm-debug.log*
 *.db
 *.sqlite
+server_db.json
+server_db.json.backup
+server_db_test.json
 
 # Local Environment Variables & Credentials
 .env
