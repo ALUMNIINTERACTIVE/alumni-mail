@@ -1689,3 +1689,33 @@ body {
     margin-top: 6px;
     width: 100%;
 }
+
+/* Drag and Drop PEM area */
+.drag-drop-area {
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+.drag-drop-area:hover {
+    border-color: var(--accent-light);
+    background: rgba(37, 99, 235, 0.05);
+    color: var(--text-main);
+}
+.drag-drop-area.dragover {
+    border-color: var(--success-light);
+    background: rgba(16, 185, 129, 0.05);
+}
+.drag-icon {
+    font-size: 1.8rem;
+}

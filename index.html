@@ -153,7 +153,6 @@
                         <button class="btn link-btn primary-sm glow full-width" onclick="triggerWalletUpload()">
                             ⚡ Link PEM Wallet
                         </button>
-                        <input type="file" id="wallet-file-input" class="hidden" accept=".pem" onchange="processWalletFile(event)">
                     </div>
                 </div>
 
@@ -593,7 +592,49 @@
         </div>
     </div>
 
-    <!-- SECTION 6: THE SECURITY AUDITOR DRAWER (INSPECTOR CONSOLE) -->
+    <!-- SECTION 6: ALUMNI WALLET LINKING MODAL -->
+    <div id="wallet-modal" class="modal-container hidden">
+        <div class="modal-card glass-panel" style="max-width: 440px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">🔗 Link Alumni L1 Wallet</h3>
+                <button class="close-composer-btn" onclick="closeWalletModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <form id="wallet-link-form" onsubmit="handleRegisterWallet(event)" class="auth-form active" style="display: flex; flex-direction: column; gap: 15px;">
+                <p class="subtitle" style="font-size: 0.75rem; line-height: 1.4; color: var(--text-dark); margin: 0;">
+                    Import your Elliptic Curve (secp256k1) PEM wallet. Enter your custom registered readable Tag/Alias to bind it directly to your email identity.
+                </p>
+                
+                <div class="form-group">
+                    <label for="wallet-tag-input">Custom Wallet Tag / Alias</label>
+                    <div class="input-wrapper domain-select-wrapper">
+                        <input type="text" id="wallet-tag-input" class="input-field" placeholder="SATOSHI" required>
+                        <span class="domain-badge">@ALUMNI.</span>
+                    </div>
+                    <small class="helper-text" style="color: var(--text-dark); font-size: 0.7rem; margin-top: 4px;">This readable alias will be formatted and officially minted/registered on your L1 blockchain.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Upload secp256k1 Wallet PEM File</label>
+                    <div class="drag-drop-area" id="wallet-drag-area" onclick="triggerWalletInput()">
+                        <span class="drag-icon">🔑</span>
+                        <span id="wallet-file-label">Click or Drag & Drop PEM File</span>
+                        <input type="file" id="wallet-pem-input" class="hidden" accept=".pem" onchange="handleWalletFileSelect(event)">
+                    </div>
+                </div>
+
+                <div id="wallet-link-error" class="auth-error-msg hidden"></div>
+
+                <div class="form-actions" style="margin-top: 5px;">
+                    <button type="submit" class="btn primary glow full-width">
+                        <span>⚡ Mint & Link Wallet</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SECTION 7: THE SECURITY AUDITOR DRAWER (INSPECTOR CONSOLE) -->
     <div id="auditor-drawer" class="auditor-container minimized">
         <div class="auditor-header" onclick="toggleAuditorDrawer()">
             <div class="auditor-header-title">

@@ -377,45 +377,84 @@ function handleLogout() {
 // -------------------------------------------------------------
 // ALUMNI L1 BLOCKCHAIN WALLET INTEGRATION
 // -------------------------------------------------------------
+let uploadedWalletPem = null;
+
 function triggerWalletUpload() {
-    document.getElementById('wallet-file-input').click();
+    document.getElementById('wallet-modal').classList.remove('hidden');
+    document.getElementById('wallet-link-form').reset();
+    document.getElementById('wallet-file-label').innerText = "Click or Drag & Drop PEM File";
+    document.getElementById('wallet-link-error').classList.add('hidden');
+    uploadedWalletPem = null;
 }
 
-async function processWalletFile(event) {
-    const file = event.target.files[0];
+function closeWalletModal() {
+    document.getElementById('wallet-modal').classList.add('hidden');
+}
+
+function triggerWalletInput() {
+    document.getElementById('wallet-pem-input').click();
+}
+
+function handleWalletFileSelect(event) {
+    const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async function(e) {
+    reader.onload = function(e) {
         const fileContent = e.target.result;
         
-        // Verify standard private key structures inside PEM text
         if (!fileContent.includes("-----BEGIN PRIVATE KEY-----") && 
             !fileContent.includes("-----BEGIN RSA PRIVATE KEY-----") && 
             !fileContent.includes("-----BEGIN CERTIFICATE-----") && 
             !fileContent.includes("-----BEGIN PUBLIC KEY-----")) {
-            alert("Invalid PEM file! Please upload your verified Alumni PEM Wallet key.");
+            document.getElementById('wallet-link-error').innerText = "Invalid PEM file! Make sure it contains valid cryptographic headers.";
+            document.getElementById('wallet-link-error').classList.remove('hidden');
+            uploadedWalletPem = null;
             return;
         }
 
-        // Generate a deterministic wallet tag based on file content string
-        let tag = "ALUMNI_";
-        try {
-            let hash = 0;
-            for (let i = 0; i < fileContent.length; i++) {
-                const char = fileContent.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            tag += Math.abs(hash).toString(16).toUpperCase();
-        } catch (err) {
-            tag += "GENESIS_KEY";
-        }
-
-        localStorage.setItem(`wallet_tag_${session.username}`, tag);
-        await updateWalletBalance(tag);
+        uploadedWalletPem = fileContent;
+        document.getElementById('wallet-file-label').innerText = `📄 ${file.name} loaded successfully`;
+        document.getElementById('wallet-link-error').classList.add('hidden');
     };
     reader.readAsText(file);
+}
+
+// Hook up drag over visual handlers once page loads
+document.addEventListener('DOMContentLoaded', () => {
+    const dragArea = document.getElementById('wallet-drag-area');
+    if (dragArea) {
+        dragArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragArea.classList.add('dragover');
+        });
+        dragArea.addEventListener('dragleave', () => {
+            dragArea.classList.remove('dragover');
+        });
+        dragArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragArea.classList.remove('dragover');
+            handleWalletFileSelect(e);
+        });
+    }
+});
+
+async function handleRegisterWallet(event) {
+    event.preventDefault();
+    const tagInput = document.getElementById('wallet-tag-input').value.trim();
+    
+    if (!uploadedWalletPem) {
+        document.getElementById('wallet-link-error').innerText = "Please upload or drag your wallet's PEM key file first.";
+        document.getElementById('wallet-link-error').classList.remove('hidden');
+        return;
+    }
+
+    // Clean and validate: convert to uppercase and strip non-alphanumeric chars
+    const cleanTag = "@ALUMNI." + tagInput.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    
+    localStorage.setItem(`wallet_tag_${session.username}`, cleanTag);
+    await updateWalletBalance(cleanTag);
+    closeWalletModal();
 }
 
 async function updateWalletBalance(tag) {
