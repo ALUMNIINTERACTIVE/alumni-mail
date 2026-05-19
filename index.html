@@ -43,7 +43,7 @@
                     <div class="form-group">
                         <label for="login-username">Email / Alumni ID</label>
                         <div class="input-wrapper">
-                            <input type="text" id="login-username" class="input-field" placeholder="satoshi@alumnimail.com" required autocomplete="username">
+                            <input type="text" id="login-username" class="input-field" placeholder="satoshi@alumnimail.app" required autocomplete="username">
                             <span class="input-icon">👤</span>
                         </div>
                     </div>
@@ -68,7 +68,7 @@
                         <label for="register-username">Secure Email Address</label>
                         <div class="input-wrapper domain-select-wrapper">
                             <input type="text" id="register-username" class="input-field" placeholder="satoshi" required autocomplete="username">
-                            <span class="domain-badge">@alumnimail.com</span>
+                            <span class="domain-badge">@alumnimail.app</span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -123,7 +123,7 @@
                 <div class="session-user-info">
                     <div class="avatar">👤</div>
                     <div class="user-details">
-                        <span id="active-user-display" class="username">satoshi@alumnimail.com</span>
+                        <span id="active-user-display" class="username">satoshi@alumnimail.app</span>
                         <span class="status-indicator-wrapper">
                             <span class="status-dot green"></span>
                             <span class="status-text">Client Secured</span>
@@ -219,11 +219,11 @@
                                 <div class="detail-meta">
                                     <div class="meta-row">
                                         <span class="meta-label">From:</span>
-                                        <span id="detail-from" class="meta-value bold font-mono">sender@alumnimail.com</span>
+                                        <span id="detail-from" class="meta-value bold font-mono">sender@alumnimail.app</span>
                                     </div>
                                     <div class="meta-row">
                                         <span class="meta-label">To:</span>
-                                        <span id="detail-to" class="meta-value bold font-mono">recipient@alumnimail.com</span>
+                                        <span id="detail-to" class="meta-value bold font-mono">recipient@alumnimail.app</span>
                                     </div>
                                     <div class="meta-row">
                                         <span class="meta-label">Date:</span>
@@ -334,13 +334,13 @@
                                             <tr id="dns-row-mx">
                                                 <td><span class="record-badge mx">MX</span></td>
                                                 <td><span class="font-mono font-size-sm">@</span></td>
-                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('mail.alumnimail.com')">10 mail.alumnimail.com 📋</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('mail.alumnimail.app')">10 mail.alumnimail.app 📋</span></td>
                                                 <td><span class="status-icon" id="dns-status-mx">⏳ Pending</span></td>
                                             </tr>
                                             <tr id="dns-row-spf">
                                                 <td><span class="record-badge txt">TXT</span></td>
                                                 <td><span class="font-mono font-size-sm">@</span></td>
-                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=spf1 include:alumnimail.com ~all')">v=spf1 include:alumnimail.com ~all 📋</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=spf1 include:alumnimail.app ~all')">v=spf1 include:alumnimail.app ~all 📋</span></td>
                                                 <td><span class="status-icon" id="dns-status-spf">⏳ Pending</span></td>
                                             </tr>
                                             <tr id="dns-row-dkim">
@@ -405,7 +405,7 @@
                             <h3>Active Keypair (RSA-OAEP 2048)</h3>
                             <div class="key-meta-info">
                                 <label>Associated Address:</label>
-                                <span class="highlight bold font-mono" id="key-mgr-user">satoshi@alumnimail.com</span>
+                                <span class="highlight bold font-mono" id="key-mgr-user">satoshi@alumnimail.app</span>
                             </div>
                             <div class="key-field">
                                 <label>Public Key (SPKI / JWK) - Shared Plaintext</label>
@@ -484,7 +484,7 @@
                 </div>
                 <div class="composer-row">
                     <label for="compose-to">To:</label>
-                    <input type="text" id="compose-to" class="input-field font-mono" placeholder="recipient@alumnimail.com" required oninput="evaluateRecipientKeys()">
+                    <input type="text" id="compose-to" class="input-field font-mono" placeholder="recipient@alumnimail.app" required oninput="evaluateRecipientKeys()">
                 </div>
                 <div class="composer-row">
                     <label for="compose-subject">Subject:</label>

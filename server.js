@@ -220,8 +220,8 @@ app.post('/api/domains/add', (req, res) => {
         owner: normOwner,
         isVerified: false,
         dnsRecords: {
-            mx: { type: "MX", host: "@", value: `10 relay.alumnimail.com`, resolved: false },
-            spf: { type: "TXT", host: "@", value: "v=spf1 include:relay.alumnimail.com ~all", resolved: false },
+            mx: { type: "MX", host: "@", value: `10 relay.alumnimail.app`, resolved: false },
+            spf: { type: "TXT", host: "@", value: "v=spf1 include:relay.alumnimail.app ~all", resolved: false },
             dkim: { type: "TXT", host: "alumni._domainkey", value: "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0...", resolved: false },
             dmarc: { type: "TXT", host: "_dmarc", value: "v=DMARC1; p=quarantine;", resolved: false }
         }

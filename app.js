@@ -18,9 +18,9 @@ let session = {
 
 // Seeding standard external recipients and standard users
 async function seedRecipientRegistry() {
-    // We register a couple of built-in demo recipients (e.g. hal@alumnimail.com)
+    // We register a couple of built-in demo recipients (e.g. hal@alumnimail.app)
     // so the user can immediately test hybrid E2EE out of the box!
-    const hal = window.AlumniMailDB.getUser('hal@alumnimail.com');
+    const hal = window.AlumniMailDB.getUser('hal@alumnimail.app');
     if (!hal) {
         // Pre-generating Hal's E2EE keys in database
         const saltBytes = window.crypto.getRandomValues(new Uint8Array(16));
@@ -33,11 +33,11 @@ async function seedRecipientRegistry() {
         const publicJwk = await window.crypto.subtle.exportKey("jwk", keypair.publicKey);
         const encPrivateKey = await window.AlumniMailCrypto.encryptPrivateKey(keypair.privateKey, kdk);
         
-        window.AlumniMailDB.registerUser('hal@alumnimail.com', authHash, saltBase64, publicJwk, encPrivateKey);
+        window.AlumniMailDB.registerUser('hal@alumnimail.app', authHash, saltBase64, publicJwk, encPrivateKey);
         
         // Send a seed greeting email from Hal to Satoshi (if Satoshi doesn't exist yet, it's fine, we send it anyway)
         // Since we don't have Satoshi's public key yet, we'll send it as standard text or simulate hybrid E2EE to Satoshi later
-        window.AlumniMailDB.auditLog("SEED", "Seeded Hal Finney's cryptographic profile (hal@alumnimail.com)");
+        window.AlumniMailDB.auditLog("SEED", "Seeded Hal Finney's cryptographic profile (hal@alumnimail.app)");
     }
 }
 
@@ -158,7 +158,7 @@ async function handleRegister(event) {
         return;
     }
 
-    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.com`;
+    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.app`;
 
     // Check if user exists
     if (window.AlumniMailDB.getUser(fullUsername)) {
@@ -226,7 +226,7 @@ async function handleLogin(event) {
 
     errorEl.classList.add('hidden');
 
-    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.com`;
+    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.app`;
     const user = window.AlumniMailDB.getUser(fullUsername);
 
     if (!user) {
@@ -292,10 +292,10 @@ async function handleLogin(event) {
 // Pre-seeding a welcome message when Satoshi or any user logs in
 function seedInboxGreeting(username, recipientPublicJwk) {
     const emails = window.AlumniMailDB.getEmailsForUser(username);
-    const welcomeExists = emails.some(e => e.sender === 'hal@alumnimail.com');
+    const welcomeExists = emails.some(e => e.sender === 'hal@alumnimail.app');
     
     if (!welcomeExists) {
-        // We trigger an E2EE message sent from hal@alumnimail.com to Satoshi
+        // We trigger an E2EE message sent from hal@alumnimail.app to Satoshi
         setTimeout(async () => {
             const subject = "Welcome to Alumni Mail!";
             const body = `Hello Satoshi,
@@ -315,7 +315,7 @@ Hal`;
             const encData = await window.AlumniMailCrypto.encryptEmail(subject, body, recipientPublicJwk);
             
             window.AlumniMailDB.sendEmail({
-                sender: 'hal@alumnimail.com',
+                sender: 'hal@alumnimail.app',
                 recipient: username,
                 encryptedPayload: encData.encryptedPayload,
                 encryptedSessionKey: encData.encryptedSessionKey,
@@ -323,7 +323,7 @@ Hal`;
             });
 
             logNetworkRequest("POST", "/api/v1/deliver", {
-                sender: "hal@alumnimail.com",
+                sender: "hal@alumnimail.app",
                 recipient: username,
                 payload: encData.encryptedPayload,
                 wrapped_key: encData.encryptedSessionKey
