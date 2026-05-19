@@ -158,7 +158,16 @@ async function handleRegister(event) {
         return;
     }
 
-    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.app`;
+    // Strict registration rule: Users can only sign up under the @alumnimail.app domain
+    let cleanedUsername = usernameInput.trim();
+    if (cleanedUsername.includes('@')) {
+        if (!cleanedUsername.toLowerCase().endsWith('@alumnimail.app')) {
+            errorEl.innerText = "Strict Rule: Signups are restricted to the @alumnimail.app domain.";
+            errorEl.classList.remove('hidden');
+            return;
+        }
+    }
+    const fullUsername = cleanedUsername.includes('@') ? cleanedUsername : `${cleanedUsername}@alumnimail.app`;
 
     // Check if user exists
     if (window.AlumniMailDB.getUser(fullUsername)) {
