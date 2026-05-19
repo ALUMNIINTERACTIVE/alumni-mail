@@ -67,6 +67,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearAuditorLogs('network');
 });
 
+function renderActiveViewData() {
+    if (['inbox', 'sent', 'archive', 'trash'].includes(session.activeView)) {
+        renderMailList();
+    } else if (session.activeView === 'domains') {
+        renderDomainsView();
+    } else if (session.activeView === 'keys') {
+        renderKeysView();
+    }
+}
+
 // -------------------------------------------------------------
 // NAVIGATION & VIEWS SYSTEM
 // -------------------------------------------------------------
