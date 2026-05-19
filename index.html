@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alumni Mail | End-to-End Encrypted Privacy Ecosystem</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Background decorative grids -->
+    <div class="bg-glow bg-glow-blue"></div>
+    <div class="bg-glow bg-glow-emerald"></div>
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="app" class="app-container">
+        
+        <!-- SECTION 1: AUTHENTICATION SCREEN -->
+        <div id="auth-screen" class="auth-wrapper active">
+            <div class="auth-card glass-panel">
+                <div class="auth-header">
+                    <div class="logo-container">
+                        <div class="brand-logo">
+                            <span class="logo-lock">🔒</span>
+                        </div>
+                        <span class="badge success">ZERO-KNOWLEDGE</span>
+                    </div>
+                    <h1>ALUMNI MAIL</h1>
+                    <p class="subtitle">E2EE Privacy Ecosystem for Enterprise & Alumni</p>
+                </div>
+
+                <div class="auth-tabs">
+                    <button id="tab-login-btn" class="auth-tab-btn active" onclick="switchAuthTab('login')">Unlock Mailbox</button>
+                    <button id="tab-register-btn" class="auth-tab-btn" onclick="switchAuthTab('register')">Create Secure ID</button>
+                </div>
+
+                <!-- Login Form -->
+                <form id="login-form" class="auth-form active" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="login-username">Email / Alumni ID</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="login-username" class="input-field" placeholder="satoshi@alumnimail.com" required autocomplete="username">
+                            <span class="input-icon">👤</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Secret Passphrase</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="login-password" class="input-field" placeholder="••••••••••••••••" required autocomplete="current-password">
+                            <span class="input-icon">🔑</span>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn primary glow full-width">
+                            <span class="btn-text">Unlock Mailbox</span>
+                        </button>
+                    </div>
+                    <div id="login-error" class="auth-error-msg hidden"></div>
+                </form>
+
+                <!-- Register Form -->
+                <form id="register-form" class="auth-form" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="register-username">Secure Email Address</label>
+                        <div class="input-wrapper domain-select-wrapper">
+                            <input type="text" id="register-username" class="input-field" placeholder="satoshi" required autocomplete="username">
+                            <span class="domain-badge">@alumnimail.com</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="register-password">Create Secret Passphrase</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="register-password" class="input-field" placeholder="Choose a highly secure passphrase" required autocomplete="new-password">
+                            <span class="input-icon">🔑</span>
+                        </div>
+                        <small class="helper-text">Your password never leaves this browser. Used to derive your keys locally.</small>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn primary glow full-width">
+                            <span class="btn-text">Generate Cryptographic ID</span>
+                        </button>
+                    </div>
+                    <div id="register-error" class="auth-error-msg hidden"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- SECTION 2: CRYPTO GENERATION OVERLAY -->
+        <div id="crypto-overlay" class="overlay-container hidden">
+            <div class="overlay-card glass-panel">
+                <div class="spinner-container">
+                    <div class="crypto-spinner"></div>
+                    <div class="spinner-icon">🔐</div>
+                </div>
+                <h3>Deploying Cryptographic Identity</h3>
+                <p id="crypto-status-text" class="subtitle">Deriving keys...</p>
+                <div class="crypto-steps">
+                    <div id="step-pbkdf2" class="step"><span class="step-status">⏳</span> PBKDF2 Password Derivation (10,000 iterations)</div>
+                    <div id="step-rsa" class="step"><span class="step-status">⏳</span> RSA-OAEP 2048-bit Key Pair Generation</div>
+                    <div id="step-aes" class="step"><span class="step-status">⏳</span> AES-GCM Encrypted Private Key Export</div>
+                    <div id="step-db" class="step"><span class="step-status">⏳</span> Transmitting Zero-Knowledge Profile to server</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 3: MAILBOX DASHBOARD VIEW -->
+        <div id="dashboard-screen" class="dashboard-wrapper hidden">
+            
+            <!-- LEFT NAVIGATION SIDEBAR -->
+            <aside class="sidebar glass-panel">
+                <div class="brand">
+                    <div class="logo-glow">🔒</div>
+                    <div>
+                        <h1>ALUMNI MAIL</h1>
+                        <span class="badge success">E2EE ACTIVATED</span>
+                    </div>
+                </div>
+
+                <div class="session-user-info">
+                    <div class="avatar">👤</div>
+                    <div class="user-details">
+                        <span id="active-user-display" class="username">satoshi@alumnimail.com</span>
+                        <span class="status-indicator-wrapper">
+                            <span class="status-dot green"></span>
+                            <span class="status-text">Client Secured</span>
+                        </span>
+                    </div>
+                </div>
+
+                <button class="btn primary compose-btn glow" onclick="openComposer()">
+                    <span class="btn-icon">➕</span> Compose Secure Mail
+                </button>
+
+                <nav class="nav-links">
+                    <ul>
+                        <li id="nav-inbox" class="active" onclick="switchView('inbox')">
+                            <span class="nav-icon">📥</span> Inbox
+                            <span id="inbox-count" class="nav-badge hidden">0</span>
+                        </li>
+                        <li id="nav-sent" onclick="switchView('sent')">
+                            <span class="nav-icon">📤</span> Sent
+                        </li>
+                        <li id="nav-archive" onclick="switchView('archive')">
+                            <span class="nav-icon">📦</span> Archive
+                        </li>
+                        <li id="nav-trash" onclick="switchView('trash')">
+                            <span class="nav-icon">🗑️</span> Trash
+                        </li>
+                        <li class="nav-divider">PRO FEATURES</li>
+                        <li id="nav-domains" onclick="switchView('domains')">
+                            <span class="nav-icon">🌐</span> Custom Domains
+                            <span id="domain-count" class="badge-mini">0</span>
+                        </li>
+                        <li id="nav-keys" onclick="switchView('keys')">
+                            <span class="nav-icon">🔑</span> Key Manager
+                        </li>
+                        <li id="nav-settings" onclick="switchView('settings')">
+                            <span class="nav-icon">⚙️</span> Settings
+                        </li>
+                    </ul>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <button class="btn secondary full-width" onclick="handleLogout()">
+                        <span>🔓</span> Lock Mailbox
+                    </button>
+                    <div class="system-node">
+                        <span class="status-dot pulsing green"></span> Connected to Alumni Mail Node
+                    </div>
+                </div>
+            </aside>
+
+            <!-- MAIN WORKSPACE -->
+            <main class="main-content">
+                
+                <!-- VIEW A: STANDARD MAILBOX LIST & DETAILS -->
+                <div id="view-mail" class="mail-workspace active">
+                    
+                    <!-- EMAIL LIST PANE -->
+                    <section class="email-list-pane glass-panel">
+                        <div class="pane-header">
+                            <h2 id="view-title">Inbox</h2>
+                            <div class="search-bar">
+                                <input type="text" id="mail-search" class="input-field" placeholder="Search decrypted headers..." onkeyup="filterEmails()">
+                                <span class="search-icon">🔍</span>
+                            </div>
+                        </div>
+
+                        <div id="email-list" class="email-list-container">
+                            <!-- Populated dynamically -->
+                            <div class="empty-state-list">
+                                <span class="empty-icon">✉️</span>
+                                <p>No encrypted messages found</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- EMAIL VIEW PANE -->
+                    <section class="email-detail-pane glass-panel">
+                        <!-- Empty Details State -->
+                        <div id="email-detail-empty" class="detail-empty">
+                            <div class="secure-logo-glow">🔒</div>
+                            <h3>Client-Side Cryptographic Decryption</h3>
+                            <p class="subtitle text-center">Select an email to decrypt its contents in real-time. Decryption keys remain locally in your browser memory.</p>
+                            <div class="crypto-badge-group">
+                                <span class="crypt-pill"><span class="pill-icon">🔒</span> AES-GCM-256</span>
+                                <span class="crypt-pill"><span class="pill-icon">🔑</span> RSA-OAEP-2048</span>
+                                <span class="crypt-pill"><span class="pill-icon">🛡️</span> PBKDF2</span>
+                            </div>
+                        </div>
+
+                        <!-- Active Mail View -->
+                        <div id="email-detail-active" class="detail-active hidden">
+                            <div class="detail-header">
+                                <div class="detail-meta">
+                                    <div class="meta-row">
+                                        <span class="meta-label">From:</span>
+                                        <span id="detail-from" class="meta-value bold font-mono">sender@alumnimail.com</span>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">To:</span>
+                                        <span id="detail-to" class="meta-value bold font-mono">recipient@alumnimail.com</span>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label">Date:</span>
+                                        <span id="detail-date" class="meta-value">Today at 12:00 PM</span>
+                                    </div>
+                                </div>
+                                <div class="detail-actions">
+                                    <button class="btn secondary" id="btn-toggle-cipher" onclick="toggleCiphertext()">
+                                        👁️ View Ciphertext
+                                    </button>
+                                    <button class="btn secondary trash" onclick="deleteActiveEmail()">
+                                        🗑️ Delete
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="security-card glass-panel" id="security-badge-card">
+                                <div class="security-card-header">
+                                    <span class="secure-indicator-dot secure"></span>
+                                    <span class="security-title" id="security-card-title">🔒 End-to-End Encrypted (E2EE)</span>
+                                </div>
+                                <p class="security-card-text" id="security-card-text">
+                                    This message was encrypted on the sender's client and decrypted locally in your browser using your derived RSA private key. The server only sees base64 ciphertext.
+                                </p>
+                            </div>
+
+                            <h2 id="detail-subject" class="email-subject">Decrypted Subject Line</h2>
+
+                            <!-- Content body container -->
+                            <div class="email-body-wrapper">
+                                <div id="detail-body-decrypted" class="email-body-text">
+                                    <!-- Decrypted content renders here -->
+                                </div>
+                                
+                                <div id="detail-body-ciphertext" class="email-body-cipher hidden">
+                                    <label>Raw Payload Encrypted Database Ciphertext</label>
+                                    <pre id="cipher-payload-raw" class="font-mono">Payload Base64 data...</pre>
+
+                                    <label id="cipher-key-label">Wrapped Symmetric AES-GCM Session Key (RSA Encrypted)</label>
+                                    <pre id="cipher-key-raw" class="font-mono">Session Key Ciphertext...</pre>
+                                    
+                                    <div class="alert warning">
+                                        <strong>Zero-Knowledge Audit:</strong> Notice that the subject line, body, and session key are fully encrypted strings. Without your passphrase-derived private key, it is mathematically impossible to reconstruct the cleartext.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- VIEW B: CUSTOM DOMAINS MANAGER -->
+                <div id="view-domains" class="domains-workspace glass-panel view-section hidden">
+                    <div class="view-header">
+                        <h2>🌐 Domain Hosting & Custom Email Aliases</h2>
+                        <p class="subtitle">Verify ownership of custom domains by configuring DNS records and create secure cryptographic aliases ending in your business name.</p>
+                    </div>
+
+                    <div class="domain-grid">
+                        
+                        <!-- ADD DOMAIN WIZARD -->
+                        <div class="domain-card glass-panel flex-column">
+                            <h3>Add Custom Domain</h3>
+                            <form onsubmit="handleNewDomain(event)" class="simple-form">
+                                <div class="form-group">
+                                    <label>Domain Name</label>
+                                    <input type="text" id="new-domain-input" class="input-field" placeholder="mybusiness.com" required>
+                                </div>
+                                <button type="submit" class="btn primary glow">Bind Custom Domain</button>
+                            </form>
+                            
+                            <div class="active-domains-list">
+                                <h4>My Active Domains</h4>
+                                <ul id="active-domains-ul">
+                                    <!-- Populated dynamically -->
+                                    <li class="empty-li">No custom domains configured</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- DNS WIZARD PANEL -->
+                        <div class="domain-card glass-panel flex-column expand-2">
+                            <h3>DNS Verification Wizard</h3>
+                            
+                            <div id="dns-empty-state" class="dns-empty">
+                                <span class="dns-icon">🌐</span>
+                                <p>Select or add a domain on the left to begin verification and DNS records configuration.</p>
+                            </div>
+
+                            <div id="dns-verification-panel" class="dns-panel-active hidden">
+                                <div class="dns-header-row">
+                                    <h4>Domain: <span id="dns-active-domain-name" class="font-mono highlight">mybusiness.com</span></h4>
+                                    <span id="dns-domain-status-badge" class="badge warning">PENDING DNS VERIFICATION</span>
+                                </div>
+
+                                <p class="helper-text margin-b">To secure emails for this domain, configure the following DNS records in your domain registrar (e.g. GoDaddy, Namecheap, Cloudflare). Once completed, click verify.</p>
+
+                                <div class="table-container">
+                                    <table class="dns-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Host / Name</th>
+                                                <th>Value / Target</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr id="dns-row-mx">
+                                                <td><span class="record-badge mx">MX</span></td>
+                                                <td><span class="font-mono font-size-sm">@</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('mail.alumnimail.com')">10 mail.alumnimail.com 📋</span></td>
+                                                <td><span class="status-icon" id="dns-status-mx">⏳ Pending</span></td>
+                                            </tr>
+                                            <tr id="dns-row-spf">
+                                                <td><span class="record-badge txt">TXT</span></td>
+                                                <td><span class="font-mono font-size-sm">@</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=spf1 include:alumnimail.com ~all')">v=spf1 include:alumnimail.com ~all 📋</span></td>
+                                                <td><span class="status-icon" id="dns-status-spf">⏳ Pending</span></td>
+                                            </tr>
+                                            <tr id="dns-row-dkim">
+                                                <td><span class="record-badge txt">TXT</span></td>
+                                                <td><span class="font-mono font-size-sm">alumni._domainkey</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQ...')">v=DKIM1; k=rsa; p=MIIB... 📋</span></td>
+                                                <td><span class="status-icon" id="dns-status-dkim">⏳ Pending</span></td>
+                                            </tr>
+                                            <tr id="dns-row-dmarc">
+                                                <td><span class="record-badge txt">TXT</span></td>
+                                                <td><span class="font-mono font-size-sm">_dmarc</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=DMARC1; p=quarantine; pct=100;')">v=DMARC1; p=quarantine; pct=100; 📋</span></td>
+                                                <td><span class="status-icon" id="dns-status-dmarc">⏳ Pending</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="dns-wizard-actions">
+                                    <button class="btn primary glow" id="btn-dns-verify" onclick="simulateDNSVerification()">
+                                        Verify DNS Records
+                                    </button>
+                                </div>
+
+                                <!-- ALIAS CREATION SECTION (Visible only if verified) -->
+                                <div id="alias-creator-section" class="alias-section hidden">
+                                    <hr class="section-divider">
+                                    <h3>Configure Custom Email Aliases</h3>
+                                    <p class="helper-text margin-b">Create distinct custom E2EE mailboxes under this verified domain. Each alias generates a unique client-side secure key pair.</p>
+                                    
+                                    <form onsubmit="handleCreateAlias(event)" class="alias-form">
+                                        <div class="input-wrapper alias-input-wrapper">
+                                            <input type="text" id="alias-username-input" class="input-field" placeholder="ceo" required>
+                                            <span class="alias-domain-badge" id="alias-domain-label">@mybusiness.com</span>
+                                        </div>
+                                        <button type="submit" class="btn primary glow">Deploy Alias & Keypair</button>
+                                    </form>
+
+                                    <div class="deployed-aliases-list">
+                                        <h4>Active Domain Addresses</h4>
+                                        <ul id="deployed-aliases-ul">
+                                            <!-- Dynamically populated -->
+                                        </ul>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- VIEW C: KEY MANAGER -->
+                <div id="view-keys" class="keys-workspace glass-panel view-section hidden">
+                    <div class="view-header">
+                        <h2>🔑 Key Ring & Cryptographic Keys</h2>
+                        <p class="subtitle">Audit and export your locally derived keys. Remember: Alumni Mail is zero-knowledge. Your private keys never touch our servers in plain-text.</p>
+                    </div>
+
+                    <div class="keys-grid">
+                        <div class="key-panel glass-panel">
+                            <h3>Active Keypair (RSA-OAEP 2048)</h3>
+                            <div class="key-meta-info">
+                                <label>Associated Address:</label>
+                                <span class="highlight bold font-mono" id="key-mgr-user">satoshi@alumnimail.com</span>
+                            </div>
+                            <div class="key-field">
+                                <label>Public Key (SPKI / JWK) - Shared Plaintext</label>
+                                <pre id="key-mgr-public" class="font-mono text-scroll">[RSA Public Key JWK]</pre>
+                            </div>
+                            <div class="key-field">
+                                <label>Private Key (PKCS#8 / JWK) - AES-GCM Encrypted</label>
+                                <pre id="key-mgr-private" class="font-mono text-scroll">[AES Encrypted Cipher Private Key]</pre>
+                            </div>
+                            
+                            <div class="key-actions">
+                                <button class="btn secondary" onclick="exportPublicKey()">Export Public Key (Plaintext)</button>
+                                <button class="btn secondary" onclick="exportPrivateKeyEncrypted()">Export Private Key (Encrypted)</button>
+                            </div>
+                        </div>
+
+                        <div class="key-panel glass-panel">
+                            <h3>Recipient Key Store</h3>
+                            <p class="helper-text margin-b">In an E2EE ecosystem, your browser queries the public key registry to encrypt messages before transmit. Add external public keys below.</p>
+                            
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Recipient</th>
+                                            <th>Algorithm</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="key-ring-tbody">
+                                        <!-- Dynamically populated -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW D: SETTINGS -->
+                <div id="view-settings" class="settings-workspace glass-panel view-section hidden">
+                    <div class="view-header">
+                        <h2>⚙️ Account Settings</h2>
+                        <p class="subtitle">Manage secure keys, themes, and configuration.</p>
+                    </div>
+
+                    <div class="settings-content">
+                        <div class="settings-card glass-panel">
+                            <h3>Security Tools</h3>
+                            <p class="helper-text margin-b">For developer audits and troubleshooting, you can wipe the complete database clean, resetting all generated RSA keys and secure data.</p>
+                            <button class="btn primary glow danger" onclick="nukeAndReset()">
+                                💥 Complete Database Nuke & Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+
+    </div>
+
+    <!-- SECTION 4: MODAL COMPOSER POP-UP -->
+    <div id="composer-modal" class="modal-container hidden">
+        <div class="composer-card glass-panel">
+            <div class="composer-header">
+                <h3>✍️ New E2EE Message</h3>
+                <button class="close-composer-btn" onclick="closeComposer()">✕</button>
+            </div>
+            
+            <form onsubmit="handleSendEmail(event)">
+                <div class="composer-row">
+                    <label for="compose-from">From:</label>
+                    <select id="compose-from" class="input-field font-mono">
+                        <!-- Populated dynamically with primary email and verified aliases -->
+                    </select>
+                </div>
+                <div class="composer-row">
+                    <label for="compose-to">To:</label>
+                    <input type="text" id="compose-to" class="input-field font-mono" placeholder="recipient@alumnimail.com" required oninput="evaluateRecipientKeys()">
+                </div>
+                <div class="composer-row">
+                    <label for="compose-subject">Subject:</label>
+                    <input type="text" id="compose-subject" class="input-field" placeholder="Secure Subject Line" required>
+                </div>
+
+                <!-- SECURITY INDICATOR BOX -->
+                <div class="composer-security-status glass-panel" id="composer-sec-card">
+                    <div class="composer-sec-row">
+                        <span class="status-indicator-wrapper">
+                            <span class="status-dot pulsing emerald" id="composer-sec-dot"></span>
+                            <span id="composer-sec-text" class="bold">🔒 Recipient E2EE Crypt Key Active</span>
+                        </span>
+                        <div class="sec-right-options">
+                            <label class="switch-wrapper hidden" id="password-toggle-wrapper">
+                                <input type="checkbox" id="compose-password-check" onchange="togglePasswordEncryptOptions()">
+                                <span class="slider"></span>
+                                Shared Password Encrypt
+                            </label>
+                        </div>
+                    </div>
+                    <div id="password-options-panel" class="password-opts-panel hidden">
+                        <div class="form-group margin-t">
+                            <label for="compose-shared-pass">Custom Shared Password</label>
+                            <input type="password" id="compose-shared-pass" class="input-field" placeholder="Password needed by recipient to decrypt">
+                        </div>
+                        <div class="form-group">
+                            <label for="compose-shared-hint">Password Hint</label>
+                            <input type="text" id="compose-shared-hint" class="input-field" placeholder="Provide a hint for your recipient">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="composer-body">
+                    <textarea id="compose-body" class="input-field composer-textarea" placeholder="Type your secure, encrypted message body here..." required></textarea>
+                </div>
+
+                <div class="composer-footer">
+                    <button type="button" class="btn secondary" onclick="closeComposer()">Cancel</button>
+                    <button type="submit" class="btn primary glow" id="btn-send-mail">Transmit Securely</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SECTION 5: EXTERNAL PORTAL POP-UP (To view password protected external emails) -->
+    <div id="external-reader-modal" class="modal-container hidden">
+        <div class="external-reader-card glass-panel">
+            <div class="reader-header">
+                <h3>🛡️ Alumni Interactive Encrypted Portal</h3>
+                <button class="close-composer-btn" onclick="closeExternalReader()">✕</button>
+            </div>
+            
+            <div id="reader-auth-view">
+                <p class="subtitle text-center">You have received a secure, password-protected message. Enter the correct decryption secret password to unlock.</p>
+                <div class="hint-card font-mono" id="reader-hint-display">
+                    Hint: No hint provided.
+                </div>
+                <div class="form-group margin-t">
+                    <input type="password" id="reader-password-input" class="input-field text-center font-mono" placeholder="Enter password to decrypt">
+                </div>
+                <button class="btn primary glow full-width" onclick="handleDecryptExternalEmail()">Decrypt Secure Message</button>
+                <div id="reader-error" class="auth-error-msg hidden">Decryption failed. Incorrect password.</div>
+            </div>
+
+            <div id="reader-content-view" class="hidden">
+                <div class="detail-meta border-b margin-b">
+                    <div class="meta-row"><span>From:</span><span id="reader-from" class="font-mono">...</span></div>
+                    <div class="meta-row"><span>To:</span><span id="reader-to" class="font-mono">...</span></div>
+                </div>
+                <h2 id="reader-subject" class="email-subject">Subject Line</h2>
+                <div id="reader-body" class="email-body-text margin-t">
+                    Decrypted content...
+                </div>
+                <div class="alert success margin-t">
+                    Decrypted locally in browser. No plain text was sent across the network.
+                </div>
+                <button class="btn secondary full-width margin-t" onclick="closeExternalReader()">Close Reader</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 6: THE SECURITY AUDITOR DRAWER (INSPECTOR CONSOLE) -->
+    <div id="auditor-drawer" class="auditor-container minimized">
+        <div class="auditor-header" onclick="toggleAuditorDrawer()">
+            <div class="auditor-header-title">
+                <span class="auditor-pulse"></span>
+                <span>🛡️ Zero-Knowledge Security Auditor & Logs</span>
+            </div>
+            <div class="auditor-header-actions">
+                <button id="btn-toggle-auditor" class="btn-icon-auditor">▲ Expand Console</button>
+            </div>
+        </div>
+
+        <div class="auditor-tabs">
+            <button class="auditor-tab-btn active" onclick="switchAuditorTab('db')">📂 Database Inspector (Live)</button>
+            <button class="auditor-tab-btn" onclick="switchAuditorTab('network')">🌐 Mock API Request Logger</button>
+            <button class="auditor-tab-btn" onclick="switchAuditorTab('memory')">🧠 Local Browser Key State</button>
+        </div>
+
+        <div class="auditor-body">
+            
+            <!-- Tab A: Database Log Panel -->
+            <div id="auditor-tab-db" class="auditor-panel-content active">
+                <div class="auditor-control-bar">
+                    <span>Active Storage Query History:</span>
+                    <button class="btn secondary btn-tiny" onclick="clearAuditorLogs('db')">Clear Queries</button>
+                </div>
+                <div id="db-sql-logs" class="logs-container font-mono">
+                    <div class="log-line system">[SYSTEM] Listening for LocalStorage query transactions...</div>
+                </div>
+            </div>
+
+            <!-- Tab B: Network API Log Panel -->
+            <div id="auditor-tab-network" class="auditor-panel-content">
+                <div class="auditor-control-bar">
+                    <span>Virtual Endpoint HTTP Payloads:</span>
+                    <button class="btn secondary btn-tiny" onclick="clearAuditorLogs('network')">Clear Logs</button>
+                </div>
+                <div id="network-api-logs" class="logs-container font-mono">
+                    <div class="log-line system">[SYSTEM] HTTP Network payload tracer active.</div>
+                </div>
+            </div>
+
+            <!-- Tab C: Memory Crypt Store Panel -->
+            <div id="auditor-tab-memory" class="auditor-panel-content">
+                <p class="helper-text margin-b">This panel lists cryptographic secrets strictly housed in active browser JS variable memory. Once the tab is closed, these values vanish completely, satisfying the Zero-Knowledge paradigm.</p>
+                <div class="memory-grid">
+                    <div class="memory-box glass-panel">
+                        <h4>🔑 Session Key Decryption Key (KDK)</h4>
+                        <div class="font-mono value-label" id="mem-kdk-val">Key locked. Please log in.</div>
+                        <small class="helper-text">Derived locally from your password using PBKDF2. Never leaves your browser.</small>
+                    </div>
+                    <div class="memory-box glass-panel">
+                        <h4>🔒 Unlocked RSA-OAEP Private Key</h4>
+                        <div class="font-mono value-label" id="mem-privkey-val">Key locked. Please log in.</div>
+                        <small class="helper-text">Used to decrypt session keys of incoming E2EE messages. Restored in-memory only.</small>
+                    </div>
+                    <div class="memory-box glass-panel">
+                        <h4>🌐 Verified Custom Domains Registry</h4>
+                        <div class="font-mono value-label" id="mem-domains-val">No custom domains verified.</div>
+                        <small class="helper-text">Bound aliases will encrypt using their corresponding specific RSA keys.</small>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="crypto.js"></script>
+    <script src="db.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
