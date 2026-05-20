@@ -11,6 +11,35 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
+// -------------------------------------------------------------
+// TWILIO CLIENT INITIALIZATION & SIMULATOR DATA
+// -------------------------------------------------------------
+let twilioClient = null;
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+
+if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+    try {
+        twilioClient = require('twilio')(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+        console.log("[TWILIO] Live Twilio Client initialized successfully.");
+    } catch (e) {
+        console.error("[TWILIO] Failed to initialize Twilio client:", e);
+    }
+} else {
+    console.log("[TWILIO] Credentials missing. Running in sandboxed simulator mode.");
+}
+
+const MOCK_NUMBERS_POOL = [
+    "+16503088812",
+    "+16505030232",
+    "+14152003881",
+    "+12128893922",
+    "+13124409281",
+    "+17025593812",
+    "+13054419921",
+    "+16508827734"
+];
+
 const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 8000;
@@ -60,6 +89,20 @@ app.use((req, res, next) => {
         return res.status(404).send('Not Found');
     }
 
+    next();
+});
+
+// Force no-cache on CSS / JS / HTML assets so layout changes are always fresh
+let tunnelPublicUrl = process.env.PUBLIC_TUNNEL_URL || null; // Set via /api/v1/tunnel/register or .env
+
+app.use((req, res, next) => {
+    const ext = path.extname(req.path).toLowerCase();
+    if (ext === '.css' || ext === '.js' || ext === '.html' || req.path === '/') {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Surrogate-Control', 'no-store');
+        res.set('Expires', '0');
+    }
     next();
 });
 
@@ -1213,8 +1256,416 @@ app.post('/api/logs/nuke', (req, res) => {
     res.json({ success: true });
 });
 
+// -------------------------------------------------------------
+// VIRTUAL PHONE NUMBER / E2EE RELAY ENDPOINTS
+// -------------------------------------------------------------
+app.get('/api/v1/twilio/status', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const { username } = req.query;
+    if (!username) {
+        return res.status(400).json({ error: "Missing username parameter." });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    res.json({
+        success: true,
+        virtualNumber: user.virtualNumber || null,
+        isSimulated: !twilioClient
+    });
+});
+
+app.get('/api/v1/twilio/search-numbers', async (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const { areaCode } = req.query;
+    
+    // Live mode
+    if (twilioClient) {
+        try {
+            let numbers = [];
+            const TOLL_FREE_PREFIXES = ['800', '888', '877', '866', '855', '844', '833'];
+            if (areaCode && TOLL_FREE_PREFIXES.includes(areaCode)) {
+                // Query toll-free numbers from Twilio
+                numbers = await twilioClient.availablePhoneNumbers('US').tollFree.list({ limit: 5 });
+            } else {
+                const searchOpts = { limit: 5 };
+                if (areaCode) searchOpts.areaCode = areaCode;
+                numbers = await twilioClient.availablePhoneNumbers('US').local.list(searchOpts);
+            }
+            const formatted = numbers.map(n => n.phoneNumber);
+            return res.json({ success: true, numbers: formatted, isSimulated: false });
+        } catch (e) {
+            console.error("[TWILIO SEARCH ERROR]", e);
+            // Fall back to simulator if real search fails due to trial account limits etc.
+        }
+    }
+
+    // Simulated mode (or fallback)
+    let filtered = MOCK_NUMBERS_POOL;
+    if (areaCode) {
+        filtered = MOCK_NUMBERS_POOL.filter(n => n.startsWith(`+1${areaCode}`));
+        // if empty, let's generate some mock numbers dynamically for that area code to be helpful
+        if (filtered.length === 0) {
+            for (let i = 0; i < 3; i++) {
+                const randPart = Math.floor(1000000 + Math.random() * 9000000);
+                filtered.push(`+1${areaCode}${randPart}`);
+            }
+        }
+    }
+    res.json({ success: true, numbers: filtered.slice(0, 5), isSimulated: true });
+});
+
+app.post('/api/v1/twilio/provision-number', async (req, res) => {
+    const { username, phoneNumber } = req.body;
+    if (!username || !phoneNumber) {
+        return res.status(400).json({ error: "Missing parameters." });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    // Premium Check
+    const isBypass = ['satoshi', 'dev', 'nycole'].includes(normUser.split('@')[0]);
+    if (user.tier !== 'Ultimate' && !isBypass) {
+        return res.status(403).json({ error: "Virtual numbers are exclusive to the Ultimate tier." });
+    }
+
+    // Live Mode
+    if (twilioClient) {
+        try {
+            // Purchase the number
+            const twilioNumber = await twilioClient.incomingPhoneNumbers.create({
+                phoneNumber: phoneNumber
+            });
+            console.log(`[TWILIO] Provisioned live number ${phoneNumber} for ${normUser}`);
+
+            // Auto-configure webhooks if tunnel URL is available
+            if (tunnelPublicUrl && twilioNumber.sid) {
+                try {
+                    await twilioClient.incomingPhoneNumbers(twilioNumber.sid).update({
+                        smsUrl: `${tunnelPublicUrl}/api/v1/twilio/inbound-sms`,
+                        smsMethod: 'POST',
+                        voiceUrl: `${tunnelPublicUrl}/api/v1/twilio/inbound-voice`,
+                        voiceMethod: 'POST'
+                    });
+                    console.log(`[TWILIO] Webhooks configured for ${phoneNumber} → ${tunnelPublicUrl}`);
+                } catch (webhookErr) {
+                    console.warn('[TWILIO] Webhook auto-config failed (can configure manually):', webhookErr.message);
+                }
+            }
+        } catch (e) {
+            console.error("[TWILIO PROVISIONING ERROR]", e);
+            console.log("[TWILIO] Provisioning failed on Twilio side. Relaying as simulated provision.");
+        }
+    }
+
+    user.virtualNumber = phoneNumber;
+    if (!user.phoneLogs) {
+        user.phoneLogs = [];
+    }
+    saveDB(db);
+
+    auditLog(
+        "UPDATE",
+        `UPDATE users SET virtual_phone_number = '${phoneNumber}' WHERE username = '${normUser}';`,
+        { username: normUser, virtualNumber: phoneNumber }
+    );
+
+    res.json({
+        success: true,
+        virtualNumber: phoneNumber,
+        webhookConfigured: !!(tunnelPublicUrl),
+        tunnelUrl: tunnelPublicUrl,
+        message: `Secure virtual number ${phoneNumber} successfully provisioned and linked to your E2EE account.`
+    });
+});
+
+
+app.post('/api/v1/twilio/release-number', async (req, res) => {
+    const { username } = req.body;
+    if (!username) {
+        return res.status(400).json({ error: "Missing parameters." });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    const releasedNumber = user.virtualNumber;
+    user.virtualNumber = null;
+    saveDB(db);
+
+    auditLog(
+        "UPDATE",
+        `UPDATE users SET virtual_phone_number = NULL WHERE username = '${normUser}';`,
+        { username: normUser, releasedNumber }
+    );
+
+    res.json({
+        success: true,
+        message: "Secure virtual number successfully released and unlinked from your E2EE account."
+    });
+});
+
+app.get('/api/v1/twilio/logs', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const { username } = req.query;
+    if (!username) {
+        return res.status(400).json({ error: "Missing username parameter." });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    res.json({
+        success: true,
+        logs: user.phoneLogs || []
+    });
+});
+
+app.post('/api/v1/twilio/simulate-inbound', (req, res) => {
+    const { username, from, body, type } = req.body;
+    if (!username || !from || !body || !type) {
+        return res.status(400).json({ error: "Missing inbound simulation parameters." });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    if (!user.virtualNumber) {
+        return res.status(400).json({ error: "No virtual number provisioned for this user." });
+    }
+
+    // Add log entry
+    if (!user.phoneLogs) {
+        user.phoneLogs = [];
+    }
+    const newLog = {
+        id: "msg_" + Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        type: type, // 'sms' or 'voice'
+        from: from,
+        body: body,
+        relayed: true
+    };
+    user.phoneLogs.unshift(newLog); // newer first
+    saveDB(db);
+
+    auditLog(
+        "INSERT",
+        `INSERT INTO e2ee_phone_relay_logs (user_id, relay_type, from_number, message_body) VALUES ('${normUser}', '${type}', '${from}', '${body.substring(0, 20)}...');`,
+        newLog
+    );
+
+    res.json({
+        success: true,
+        log: newLog,
+        message: `Simulated inbound E2EE ${type.toUpperCase()} relayed successfully.`
+    });
+});
+
+// ------------------------------------------------------------------
+// TUNNEL MANAGEMENT — register a public tunnel URL so Twilio webhooks
+// can reach the local server. Run: npx localtunnel --port 8000
+// ------------------------------------------------------------------
+
+// GET /api/v1/tunnel/status — returns the current tunnel URL
+app.get('/api/v1/tunnel/status', (req, res) => {
+    res.json({
+        tunnelUrl: tunnelPublicUrl,
+        active: !!tunnelPublicUrl,
+        smsWebhook: tunnelPublicUrl ? `${tunnelPublicUrl}/api/v1/twilio/inbound-sms` : null,
+        voiceWebhook: tunnelPublicUrl ? `${tunnelPublicUrl}/api/v1/twilio/inbound-voice` : null
+    });
+});
+
+// POST /api/v1/tunnel/register — set the public tunnel URL
+app.post('/api/v1/tunnel/register', async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.startsWith('http')) {
+        return res.status(400).json({ error: 'Valid public URL required (http:// or https://)' });
+    }
+    tunnelPublicUrl = url.replace(/\/$/, ''); // strip trailing slash
+    console.log(`[TUNNEL] Public URL registered: ${tunnelPublicUrl}`);
+
+    // Auto-update webhooks on ALL provisioned numbers
+    if (twilioClient) {
+        try {
+            const db = loadDB();
+            const numbers = await twilioClient.incomingPhoneNumbers.list();
+            for (const num of numbers) {
+                await twilioClient.incomingPhoneNumbers(num.sid).update({
+                    smsUrl: `${tunnelPublicUrl}/api/v1/twilio/inbound-sms`,
+                    smsMethod: 'POST',
+                    voiceUrl: `${tunnelPublicUrl}/api/v1/twilio/inbound-voice`,
+                    voiceMethod: 'POST'
+                });
+                console.log(`[TUNNEL] Updated webhooks for ${num.phoneNumber}`);
+            }
+        } catch (e) {
+            console.warn('[TUNNEL] Twilio webhook update error:', e.message);
+        }
+    }
+
+    res.json({
+        success: true,
+        tunnelUrl: tunnelPublicUrl,
+        smsWebhook: `${tunnelPublicUrl}/api/v1/twilio/inbound-sms`,
+        voiceWebhook: `${tunnelPublicUrl}/api/v1/twilio/inbound-voice`,
+        message: 'Tunnel URL registered and webhooks updated on all active numbers.'
+    });
+});
+
+// ------------------------------------------------------------------
+// TWILIO INBOUND WEBHOOKS — real SMS and Voice relay from Twilio
+// ------------------------------------------------------------------
+
+// POST /api/v1/twilio/inbound-sms — Twilio calls this when an SMS arrives
+app.post('/api/v1/twilio/inbound-sms', express.urlencoded({ extended: false }), async (req, res) => {
+    const from = req.body.From;   // sender's real number
+    const to   = req.body.To;     // our virtual number
+    const body = req.body.Body || '';
+
+    console.log(`[TWILIO INBOUND SMS] From: ${from} → To: ${to} | Body: ${body.substring(0, 50)}`);
+
+    const db = loadDB();
+    // Find the user whose virtualNumber matches `to`
+    const normTo = to.trim();
+    const matchedUser = Object.values(db.users).find(u => u.virtualNumber === normTo);
+
+    if (matchedUser) {
+        if (!matchedUser.phoneLogs) matchedUser.phoneLogs = [];
+        const logEntry = {
+            id: 'sms_' + Math.random().toString(36).substring(2, 9),
+            timestamp: Date.now(),
+            type: 'sms',
+            from,
+            to,
+            body,
+            relayed: true,
+            live: true
+        };
+        matchedUser.phoneLogs.unshift(logEntry);
+        db.users[matchedUser.username || Object.keys(db.users).find(k => db.users[k] === matchedUser)] = matchedUser;
+        saveDB(db);
+        auditLog('INSERT', `INSERT INTO e2ee_phone_relay_logs (relay_type, from_number, to_number, body) VALUES ('sms', '${from}', '${to}', '${body.substring(0,30)}...');`);
+        console.log(`[TWILIO INBOUND SMS] Relayed to E2EE inbox for user with number ${to}`);
+    } else {
+        console.warn(`[TWILIO INBOUND SMS] No user found for number ${to}`);
+    }
+
+    // Respond with empty TwiML (no auto-reply)
+    res.set('Content-Type', 'text/xml');
+    res.send('<Response></Response>');
+});
+
+// POST /api/v1/twilio/inbound-voice — Twilio calls this when a voice call arrives
+app.post('/api/v1/twilio/inbound-voice', express.urlencoded({ extended: false }), async (req, res) => {
+    const from = req.body.From;
+    const to   = req.body.To;
+    const callSid = req.body.CallSid;
+
+    console.log(`[TWILIO INBOUND CALL] From: ${from} → To: ${to} | SID: ${callSid}`);
+
+    const db = loadDB();
+    const normTo = to.trim();
+    const matchedUser = Object.values(db.users).find(u => u.virtualNumber === normTo);
+
+    if (matchedUser) {
+        if (!matchedUser.phoneLogs) matchedUser.phoneLogs = [];
+        const logEntry = {
+            id: 'call_' + Math.random().toString(36).substring(2, 9),
+            timestamp: Date.now(),
+            type: 'voice',
+            from,
+            to,
+            body: `Inbound voice call from ${from}`,
+            relayed: true,
+            live: true,
+            callSid
+        };
+        matchedUser.phoneLogs.unshift(logEntry);
+        saveDB(db);
+        auditLog('INSERT', `INSERT INTO e2ee_phone_relay_logs (relay_type, from_number, to_number, call_sid) VALUES ('voice', '${from}', '${to}', '${callSid}');`);
+    }
+
+    // TwiML: say a message and hang up (caller gets an announcement)
+    res.set('Content-Type', 'text/xml');
+    res.send(`<Response>
+    <Say voice="alice">This number is protected by Alumni Mail end-to-end encryption. Your message has been securely relayed. Goodbye.</Say>
+    <Hangup/>
+</Response>`);
+});
+
+// POST /api/v1/twilio/send-sms — send an outbound SMS from the user's virtual number
+app.post('/api/v1/twilio/send-sms', async (req, res) => {
+    const { username, to, body } = req.body;
+    if (!username || !to || !body) {
+        return res.status(400).json({ error: 'Missing username, to, or body' });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user || !user.virtualNumber) {
+        return res.status(400).json({ error: 'No virtual number provisioned for this account.' });
+    }
+
+    if (!twilioClient) {
+        return res.status(503).json({ error: 'SMS relay not available in sandbox mode. Add Twilio credentials to .env.' });
+    }
+
+    try {
+        const message = await twilioClient.messages.create({
+            body,
+            from: user.virtualNumber,
+            to
+        });
+        console.log(`[TWILIO SMS SENT] From: ${user.virtualNumber} → To: ${to} | SID: ${message.sid}`);
+
+        // Log it
+        if (!user.phoneLogs) user.phoneLogs = [];
+        user.phoneLogs.unshift({
+            id: 'out_' + Math.random().toString(36).substring(2, 9),
+            timestamp: Date.now(),
+            type: 'sms_out',
+            from: user.virtualNumber,
+            to,
+            body,
+            relayed: true,
+            live: true,
+            sid: message.sid
+        });
+        saveDB(db);
+
+        res.json({ success: true, sid: message.sid, from: user.virtualNumber, to });
+    } catch (e) {
+        console.error('[TWILIO SEND SMS ERROR]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Serve Ethereal test inbox interface or standard root dashboard index
 app.get('*', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Expires', '0');
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 

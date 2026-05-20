@@ -13,6 +13,7 @@
     "express": "^4.19.2",
     "nodemailer": "^6.9.13",
     "stripe": "^22.1.1",
+    "twilio": "^6.0.2",
     "ws": "^8.20.1"
   },
   "engines": {

@@ -150,7 +150,7 @@ function switchView(viewName) {
     session.activeEmailId = null;
     
     // Update active nav link classes
-    const navs = ['nav-inbox', 'nav-sent', 'nav-archive', 'nav-trash', 'nav-calendar', 'nav-calls', 'nav-domains', 'nav-keys', 'nav-settings'];
+    const navs = ['nav-inbox', 'nav-sent', 'nav-archive', 'nav-trash', 'nav-calendar', 'nav-calls', 'nav-phone', 'nav-domains', 'nav-keys', 'nav-settings'];
     navs.forEach(navId => {
         const el = document.getElementById(navId);
         if (el) el.classList.remove('active');
@@ -166,6 +166,7 @@ function switchView(viewName) {
     const settingsWorkspace = document.getElementById('view-settings');
     const calendarWorkspace = document.getElementById('view-calendar');
     const callsWorkspace = document.getElementById('view-calls');
+    const phoneWorkspace = document.getElementById('view-phone');
 
     mainWorkspace.classList.add('hidden');
     domainsWorkspace.classList.add('hidden');
@@ -173,6 +174,7 @@ function switchView(viewName) {
     settingsWorkspace.classList.add('hidden');
     if (calendarWorkspace) calendarWorkspace.classList.add('hidden');
     if (callsWorkspace) callsWorkspace.classList.add('hidden');
+    if (phoneWorkspace) phoneWorkspace.classList.add('hidden');
 
     if (['inbox', 'sent', 'archive', 'trash'].includes(viewName)) {
         mainWorkspace.classList.remove('hidden');
@@ -198,6 +200,11 @@ function switchView(viewName) {
         if (callsWorkspace) {
             callsWorkspace.classList.remove('hidden');
             renderCallsView();
+        }
+    } else if (viewName === 'phone') {
+        if (phoneWorkspace) {
+            phoneWorkspace.classList.remove('hidden');
+            renderPhoneView();
         }
     }
 }
@@ -2333,6 +2340,7 @@ let currentCallPeer = null;
 let currentCallType = null;
 let pendingOffer = null;
 let pendingCaller = null;
+let iceCandidatesQueue = [];
 
 function openUpgradeModal() {
     document.getElementById('upgrade-modal').classList.add('active');
@@ -2884,6 +2892,30 @@ async function initiateWebRTCCall(callType, customPeer) {
     }
 }
 
+function setupRenegotiationHandler() {
+    if (!peerConnection) return;
+    
+    peerConnection.onnegotiationneeded = async () => {
+        try {
+            console.log("[WEBRTC] renegotiationneeded fired.");
+            logCallConsole("Renegotiating E2EE stream tracks...", "info");
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            signalingSocket.send(JSON.stringify({
+                type: 'call-user',
+                target: currentCallPeer,
+                caller: session.username,
+                offer: offer,
+                callType: currentCallType || 'video'
+            }));
+        } catch (e) {
+            console.error("[WEBRTC] Renegotiation offer generation failed:", e);
+            logCallConsole(`[ERROR] Renegotiation failed: ${e.message}`, "warning");
+        }
+    };
+}
+
 async function handleIncomingCallSignal(data) {
     if (session.userTier !== 'Ultimate') {
         signalingSocket.send(JSON.stringify({
@@ -2891,6 +2923,27 @@ async function handleIncomingCallSignal(data) {
             target: data.caller
         }));
         console.log(`[WS_SIGNAL] Auto-rejected call from ${data.caller} (Ultimate required, tier is ${session.userTier})`);
+        return;
+    }
+    
+    // Check if this is an in-call renegotiation offer
+    if (peerConnection && currentCallPeer === data.caller.toLowerCase().trim()) {
+        console.log("[WS_SIGNAL] Received renegotiation offer from current peer.");
+        try {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            await processQueuedIceCandidates();
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            signalingSocket.send(JSON.stringify({
+                type: 'call-accepted',
+                target: currentCallPeer,
+                answer: answer
+            }));
+            logCallConsole("[SECURE] Call upgraded / renegotiated successfully.", "success");
+        } catch (e) {
+            console.error("[WS_SIGNAL] Failed during in-call renegotiation:", e);
+            logCallConsole(`[ERROR] Renegotiation failed: ${e.message}`, "warning");
+        }
         return;
     }
     
@@ -2996,6 +3049,7 @@ async function acceptCall() {
         };
         
         await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+        await processQueuedIceCandidates();
         
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
@@ -3011,6 +3065,9 @@ async function acceptCall() {
         
         pendingOffer = null;
         pendingCaller = null;
+        
+        // Register renegotiation handler now that initial connection is established!
+        setupRenegotiationHandler();
     } catch (e) {
         logCallConsole(`[ERROR] Media negotiation failed: ${e.message}`, "warning");
         alert("[SECURE] Failed to accept call. Ensure microphone/camera access is permitted.");
@@ -3039,20 +3096,42 @@ async function handleCallAcceptedSignal(data) {
     try {
         logCallConsole("Consensual peer handshake verified. Negotiating streams...", "success");
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await processQueuedIceCandidates();
         
         const callStatusDisplay = document.getElementById('call-status');
         if (callStatusDisplay) callStatusDisplay.innerText = "Secured / Connected";
         
         logCallConsole("[SECURE] Peer connection complete. E2EE active.", "success");
+        
+        // Register renegotiation handler now that initial connection is established!
+        setupRenegotiationHandler();
     } catch (e) {
         logCallConsole(`[ERROR] SetRemoteDescription failed: ${e.message}`, "warning");
+    }
+}
+
+async function processQueuedIceCandidates() {
+    if (!peerConnection || !peerConnection.remoteDescription) return;
+    console.log(`[WS_SIGNAL] Processing ${iceCandidatesQueue.length} queued ICE candidates`);
+    while (iceCandidatesQueue.length > 0) {
+        const candidate = iceCandidatesQueue.shift();
+        try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+            console.error("[WS_SIGNAL] Failed adding queued ICE candidate:", e);
+        }
     }
 }
 
 async function handleIceCandidateSignal(data) {
     if (!peerConnection) return;
     try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        if (!peerConnection.remoteDescription) {
+            console.log("[WS_SIGNAL] Queueing ICE candidate because remoteDescription is null");
+            iceCandidatesQueue.push(data.candidate);
+        } else {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
     } catch (e) {
         console.error("[WS_SIGNAL] Failed adding ICE candidate:", e);
     }
@@ -3139,8 +3218,8 @@ async function toggleScreenShare() {
         
         logCallConsole("Stopped screen sharing. Restoring camera stream...", "info");
         
-        // Restore local camera track
-        const videoTrack = localStream.getVideoTracks()[0];
+        // Restore local camera track if it existed
+        const videoTrack = (localStream && localStream.getVideoTracks().length > 0) ? localStream.getVideoTracks()[0] : null;
         if (videoTrack) {
             const senders = peerConnection.getSenders();
             const sender = senders.find(s => s.track && s.track.kind === 'video');
@@ -3151,6 +3230,20 @@ async function toggleScreenShare() {
             const localVideo = document.getElementById('local-video');
             if (localVideo) {
                 localVideo.srcObject = localStream;
+                localVideo.style.display = "block";
+            }
+        } else {
+            // No camera video track to restore (e.g. voice call upgrade), so remove the video sender entirely!
+            const senders = peerConnection.getSenders();
+            const sender = senders.find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+                peerConnection.removeTrack(sender);
+            }
+            
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.srcObject = null;
+                localVideo.style.display = "none";
             }
         }
     } else {
@@ -3167,11 +3260,14 @@ async function toggleScreenShare() {
             const sender = senders.find(s => s.track && s.track.kind === 'video');
             if (sender) {
                 await sender.replaceTrack(screenTrack);
+            } else {
+                peerConnection.addTrack(screenTrack, screenStream);
             }
             
             const localVideo = document.getElementById('local-video');
             if (localVideo) {
                 localVideo.srcObject = screenStream;
+                localVideo.style.display = "block";
             }
             
             screenTrack.onended = () => {
@@ -3213,6 +3309,7 @@ function cleanupCallState() {
     isMicMuted = false;
     isCamOff = false;
     isScreenSharing = false;
+    iceCandidatesQueue = [];
     
     const callOverlay = document.getElementById('call-overlay');
     if (callOverlay) callOverlay.classList.add('hidden');
@@ -3611,3 +3708,601 @@ function dialContact(peer, callType) {
     if (peerInput) peerInput.value = peer;
     initiateWebRTCCall(callType, peer);
 }
+
+// -------------------------------------------------------------
+// E2EE VIRTUAL PHONE NUMBER / RELAY DASHBOARD CONTROLLER
+// -------------------------------------------------------------
+function renderPhoneView() {
+    const upgradeBlock = document.getElementById('phone-upgrade-block');
+    const activeView = document.getElementById('phone-active-view');
+    if (!upgradeBlock || !activeView) return;
+
+    // Check tier
+    if (session.userTier !== 'Ultimate') {
+        upgradeBlock.classList.remove('hidden');
+        activeView.classList.add('hidden');
+        return;
+    }
+
+    upgradeBlock.classList.add('hidden');
+    activeView.classList.remove('hidden');
+
+    // Fetch active virtual number status from server
+    fetchActiveVirtualNumberStatus();
+
+    // Fetch logs & render recent activity
+    fetchVirtualNumberLogs();
+}
+
+// Phone tab switching
+function switchPhoneTab(tabName) {
+    // Hide all tab content
+    document.querySelectorAll('.phone-tab-content').forEach(el => el.style.display = 'none');
+    // Remove active from all tabs
+    document.querySelectorAll('.phone-tab').forEach(el => el.classList.remove('active'));
+    // Show selected tab content
+    const content = document.getElementById('phone-tab-' + tabName);
+    if (content) content.style.display = 'block';
+    // Activate tab button
+    const tab = document.querySelector(`.phone-tab[data-tab="${tabName}"]`);
+    if (tab) tab.classList.add('active');
+}
+
+// Dialer state
+let dialerValue = '';
+
+function dialKeyPress(key) {
+    dialerValue += key;
+    updateDialerDisplay();
+}
+
+function dialerBackspace() {
+    dialerValue = dialerValue.slice(0, -1);
+    updateDialerDisplay();
+}
+
+function updateDialerDisplay() {
+    const display = document.getElementById('dialer-display');
+    if (!display) return;
+    if (dialerValue.length === 0) {
+        display.innerHTML = '&nbsp;';
+    } else {
+        display.textContent = formatDialerInput(dialerValue);
+    }
+}
+
+function formatDialerInput(val) {
+    // Auto-format as US phone number
+    const d = val.replace(/\D/g, '');
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+    if (d.length <= 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    return `+${d.slice(0, 1)} (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7, 11)}`;
+}
+
+function dialerSendSMS() {
+    if (!dialerValue || dialerValue.length < 7) {
+        alert('Please enter a phone number first.');
+        return;
+    }
+    // Jump to Messages tab with the dialed number pre-filled
+    const recipientInput = document.getElementById('sms-recipient-input');
+    if (recipientInput) {
+        recipientInput.value = dialerValue.startsWith('+') ? dialerValue : '+1' + dialerValue.replace(/\D/g, '');
+    }
+    switchPhoneTab('messages');
+    const composeInput = document.getElementById('sms-compose-input');
+    if (composeInput) composeInput.focus();
+}
+
+// SMS Thread functions
+async function sendSMSFromThread() {
+    const recipientInput = document.getElementById('sms-recipient-input');
+    const composeInput = document.getElementById('sms-compose-input');
+    const threadContainer = document.getElementById('sms-thread-container');
+    if (!recipientInput || !composeInput || !threadContainer) return;
+
+    const to = recipientInput.value.trim();
+    const body = composeInput.value.trim();
+
+    if (!to) { alert('Please enter a recipient phone number.'); return; }
+    if (!body) return;
+
+    // Add outbound bubble immediately (optimistic UI)
+    const bubble = document.createElement('div');
+    bubble.className = 'sms-bubble outbound';
+    bubble.innerHTML = `${escapeHTML(body)}<span class="sms-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} · Sending...</span>`;
+    threadContainer.appendChild(bubble);
+    threadContainer.scrollTop = threadContainer.scrollHeight;
+    composeInput.value = '';
+
+    try {
+        const res = await fetch('/api/v1/twilio/send-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: session.username, to, body })
+        });
+        const data = await res.json();
+        if (data.success) {
+            bubble.querySelector('.sms-time').textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) + ' · Delivered ✓';
+            // Add to recent activity
+            addRecentActivity('outbound_sms', to, body);
+        } else {
+            bubble.querySelector('.sms-time').textContent = 'Failed: ' + (data.error || 'Unknown error');
+            bubble.style.opacity = '0.6';
+        }
+    } catch (e) {
+        bubble.querySelector('.sms-time').textContent = 'Send failed';
+        bubble.style.opacity = '0.6';
+    }
+}
+
+function loadSMSThread() {
+    const recipientInput = document.getElementById('sms-recipient-input');
+    const threadContainer = document.getElementById('sms-thread-container');
+    if (!recipientInput || !threadContainer) return;
+
+    const number = recipientInput.value.trim();
+    if (!number) return;
+
+    // Check relay logs for messages to/from this number
+    const logs = session.phoneRelayLogs || [];
+    const filtered = logs.filter(l =>
+        l.from === number || l.to === number ||
+        l.from?.replace(/\D/g, '') === number.replace(/\D/g, '') ||
+        l.to?.replace(/\D/g, '') === number.replace(/\D/g, '')
+    );
+
+    threadContainer.innerHTML = '';
+
+    if (filtered.length === 0) {
+        threadContainer.innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: 60px;">
+                <span class="material-symbols-outlined" style="font-size: 36px; display: block; margin-bottom: 8px; opacity: 0.3;">chat_bubble</span>
+                No messages with ${escapeHTML(number)} yet.<br>Type a message below to start.
+            </div>`;
+        return;
+    }
+
+    filtered.forEach(log => {
+        const isOutbound = log.direction === 'outbound' || log.to === number || log.to?.replace(/\D/g, '') === number.replace(/\D/g, '');
+        const bubble = document.createElement('div');
+        bubble.className = 'sms-bubble ' + (isOutbound ? 'outbound' : 'inbound');
+        const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+        bubble.innerHTML = `${escapeHTML(log.body || log.message || '')}<span class="sms-time">${time}</span>`;
+        threadContainer.appendChild(bubble);
+    });
+
+    threadContainer.scrollTop = threadContainer.scrollHeight;
+}
+
+// Recent activity tracker
+function addRecentActivity(type, number, body) {
+    if (!session.recentPhoneActivity) session.recentPhoneActivity = [];
+    session.recentPhoneActivity.unshift({
+        type, number, body,
+        timestamp: new Date().toISOString()
+    });
+    if (session.recentPhoneActivity.length > 50) session.recentPhoneActivity.pop();
+    renderRecentActivity();
+}
+
+function renderRecentActivity() {
+    const container = document.getElementById('phone-recent-activity');
+    if (!container) return;
+
+    const items = session.recentPhoneActivity || [];
+    const logs = session.phoneRelayLogs || [];
+
+    // Combine recent activity and relay logs
+    const all = [
+        ...items.map(i => ({ ...i, source: 'local' })),
+        ...logs.map(l => ({
+            type: l.type === 'sms' ? (l.direction === 'outbound' ? 'outbound_sms' : 'inbound_sms') : 'inbound_voice',
+            number: l.from || l.to,
+            body: l.body || l.message || '',
+            timestamp: l.timestamp,
+            source: 'relay'
+        }))
+    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 20);
+
+    if (all.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 40px;">No recent calls or messages.</div>';
+        return;
+    }
+
+    container.innerHTML = all.map(item => {
+        const icon = item.type === 'outbound_sms' ? 'north_east' :
+                     item.type === 'inbound_sms' ? 'south_west' : 'call_received';
+        const color = item.type === 'outbound_sms' ? '#10b981' :
+                      item.type === 'inbound_sms' ? '#60a5fa' : '#a855f7';
+        const label = item.type === 'outbound_sms' ? 'Sent SMS' :
+                      item.type === 'inbound_sms' ? 'Received SMS' : 'Incoming Call';
+        const time = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+        const preview = (item.body || '').substring(0, 40) + ((item.body || '').length > 40 ? '...' : '');
+
+        return `<div class="activity-item" onclick="document.getElementById('sms-recipient-input').value='${escapeHTML(item.number || '')}';switchPhoneTab('messages');loadSMSThread();">
+            <span class="material-symbols-outlined" style="font-size: 20px; color: ${color};">${icon}</span>
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 0.85rem; font-weight: 600; color: #fff;">${escapeHTML(item.number || 'Unknown')}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${label} · ${escapeHTML(preview)}</div>
+            </div>
+            <span style="font-size: 0.7rem; color: var(--text-muted); white-space: nowrap;">${time}</span>
+        </div>`;
+    }).join('');
+}
+
+
+
+async function searchVirtualNumbers() {
+    const areaInput = document.getElementById('phone-search-area');
+    const resultsContainer = document.getElementById('phone-search-results');
+    if (!areaInput || !resultsContainer) return;
+
+    const areaCode = areaInput.value.trim();
+    if (areaCode && (!/^\d{3}$/.test(areaCode))) {
+        alert("Area code must be exactly 3 digits.");
+        return;
+    }
+
+    resultsContainer.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 15px;">
+            Searching available secure numbers...
+        </div>
+    `;
+
+    try {
+        const res = await fetch(`/api/v1/twilio/search-numbers?areaCode=${areaCode}`);
+        const data = await res.json();
+        if (data.success && data.numbers && data.numbers.length > 0) {
+            resultsContainer.innerHTML = '';
+            data.numbers.forEach(num => {
+                const item = document.createElement('div');
+                item.className = 'phone-number-item';
+                item.onclick = () => provisionVirtualNumber(num);
+                item.innerHTML = `
+                    <span>${formatPhoneNumber(num)}</span>
+                    <button class="btn primary glow" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 4px;">Provision</button>
+                `;
+                resultsContainer.appendChild(item);
+            });
+        } else {
+            resultsContainer.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 15px; border: 1px dashed var(--border-color); border-radius: 4px;">
+                    No numbers found for area code ${areaCode}. Try another.
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.error(e);
+        resultsContainer.innerHTML = `
+            <div style="text-align: center; color: #ffb4ab; font-size: 0.85rem; padding: 15px; border: 1px dashed rgba(255, 180, 171, 0.2); border-radius: 4px; background: rgba(255, 180, 171, 0.02);">
+                Search failed. Please try again.
+            </div>
+        `;
+    }
+}
+
+async function provisionVirtualNumber(phoneNumber) {
+    if (!confirm(`Are you sure you want to provision ${formatPhoneNumber(phoneNumber)} as your virtual secure phone number?`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/v1/twilio/provision-number', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: session.username,
+                phoneNumber: phoneNumber
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message);
+            // Refresh view
+            fetchActiveVirtualNumberStatus();
+        } else {
+            alert(`Provisioning failed: ${data.error || 'Unknown error'}`);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Server error provisioning virtual number.");
+    }
+}
+
+async function fetchActiveVirtualNumberStatus() {
+    const searchCard = document.getElementById('phone-search-card');
+    const provisionedCard = document.getElementById('phone-provisioned-card');
+    const displayNum = document.getElementById('active-phone-number-display');
+    const numberPill = document.getElementById('phone-active-number-pill');
+
+    try {
+        const res = await fetch(`/api/v1/twilio/status?username=${encodeURIComponent(session.username)}`);
+        const data = await res.json();
+        if (data.success && data.virtualNumber) {
+            session.virtualNumber = data.virtualNumber;
+            if (displayNum) displayNum.innerText = formatPhoneNumber(data.virtualNumber);
+            if (searchCard) searchCard.classList.add('hidden');
+            if (provisionedCard) provisionedCard.classList.remove('hidden');
+
+            // Show number pill in header
+            if (numberPill) {
+                numberPill.style.display = 'block';
+                numberPill.textContent = formatPhoneNumber(data.virtualNumber);
+            }
+        } else {
+            session.virtualNumber = null;
+            if (searchCard) searchCard.classList.remove('hidden');
+            if (provisionedCard) provisionedCard.classList.add('hidden');
+            if (numberPill) numberPill.style.display = 'none';
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+
+async function fetchVirtualNumberLogs() {
+    const container = document.getElementById('phone-logs-container');
+    if (!container) return;
+
+    try {
+        const res = await fetch(`/api/v1/twilio/logs?username=${encodeURIComponent(session.username)}`);
+        const data = await res.json();
+        if (data.success && data.logs && data.logs.length > 0) {
+            container.innerHTML = '';
+            data.logs.forEach(log => {
+                const item = document.createElement('div');
+                item.className = 'phone-log-item';
+                
+                const timeString = new Date(log.timestamp).toLocaleString();
+                const typeIcon = log.type === 'sms' ? 'sms' : 'call';
+                const typeClass = log.type === 'sms' ? 'sms' : 'voice';
+                
+                item.innerHTML = `
+                    <div class="phone-log-header">
+                        <span class="phone-log-type ${typeClass}">
+                            <span class="material-symbols-outlined" style="font-size: 11px;">${typeIcon}</span> ${log.type}
+                        </span>
+                        <span class="phone-log-time">${timeString}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span class="phone-log-from"><strong style="color: var(--text-muted); font-size: 0.75rem;">FROM:</strong> ${formatPhoneNumber(log.from)}</span>
+                        <div class="phone-log-body">
+                            <span style="font-family: var(--font-mono); font-size: 0.75rem; color: #10b981; display: block; margin-bottom: 2px;">[DECIPHERED RELAY STREAM]</span>
+                            ${escapeHTML(log.body)}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        } else {
+            container.innerHTML = `
+                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-top: 40px;">
+                    No recent communications relayed through this virtual number.
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function triggerInboundSimulation(type) {
+    if (!session.virtualNumber) {
+        alert("Please provision a virtual phone number first before simulating inbound traffic.");
+        return;
+    }
+
+    const senderInput = document.getElementById('sim-phone-sender');
+    const bodyInput = document.getElementById('sim-phone-body');
+    if (!senderInput || !bodyInput) return;
+
+    const from = senderInput.value.trim();
+    const body = bodyInput.value.trim();
+
+    if (!from) {
+        alert("Please enter a sender phone number.");
+        return;
+    }
+    if (!body) {
+        alert("Please enter a message body or call transcript.");
+        return;
+    }
+
+    // Toggle button state
+    const btn = type === 'sms' ? document.getElementById('btn-sim-sms') : document.getElementById('btn-sim-voice');
+    const origText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px; animation: spin 1s linear infinite;">sync</span> Relaying...`;
+    }
+
+    try {
+        const res = await fetch('/api/v1/twilio/simulate-inbound', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: session.username,
+                from: from,
+                body: body,
+                type: type
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            // Success! Refresh logs
+            await fetchVirtualNumberLogs();
+            bodyInput.value = ''; // clear input
+        } else {
+            alert(`Simulation failed: ${data.error}`);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Simulation request failed.");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+    }
+}
+
+function copyActivePhoneNumber() {
+    if (!session.virtualNumber) return;
+    navigator.clipboard.writeText(session.virtualNumber);
+    alert("Virtual Phone Number copied to clipboard: " + session.virtualNumber);
+}
+
+async function releaseActivePhoneNumber() {
+    if (!confirm("Are you sure you want to release your active virtual number? This will disconnect your secure E2EE relay path, and someone else may provision this number.")) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/v1/twilio/release-number', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: session.username })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message);
+            fetchActiveVirtualNumberStatus();
+        } else {
+            alert("Failed to release virtual number: " + (data.error || "Unknown error"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("An error occurred while releasing your virtual number.");
+    }
+}
+
+function formatPhoneNumber(num) {
+    if (!num) return '';
+    // Expected: +1XXXXXXXXXX
+    const clean = num.replace(/\D/g, '');
+    if (clean.length === 11 && clean.startsWith('1')) {
+        return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`;
+    }
+    return num;
+}
+
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+// ---------------------------------------------------------------
+// TUNNEL REGISTRATION — connects a public URL to Twilio webhooks
+// ---------------------------------------------------------------
+async function registerTunnelUrl() {
+    const input = document.getElementById('tunnel-url-input');
+    const statusEl = document.getElementById('tunnel-status-display');
+    if (!input || !statusEl) return;
+
+    const url = input.value.trim();
+    if (!url || !url.startsWith('http')) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(239,68,68,0.12)';
+        statusEl.style.borderColor = 'rgba(239,68,68,0.3)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '⚠ Please enter a valid URL starting with https://';
+        return;
+    }
+
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'rgba(96,165,250,0.08)';
+    statusEl.style.borderColor = 'rgba(96,165,250,0.2)';
+    statusEl.style.color = '#60a5fa';
+    statusEl.textContent = '⟳ Registering tunnel and updating webhooks...';
+
+    try {
+        const res = await fetch('/api/v1/tunnel/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (data.success) {
+            statusEl.style.background = 'rgba(16,185,129,0.1)';
+            statusEl.style.borderColor = 'rgba(16,185,129,0.3)';
+            statusEl.style.color = '#10b981';
+            statusEl.innerHTML = `✓ Webhooks connected!<br>
+                <span style="color: var(--text-muted); font-size: 0.7rem;">
+                    SMS: ${escapeHTML(data.smsWebhook)}<br>
+                    Voice: ${escapeHTML(data.voiceWebhook)}
+                </span>`;
+        } else {
+            statusEl.style.background = 'rgba(239,68,68,0.1)';
+            statusEl.style.borderColor = 'rgba(239,68,68,0.3)';
+            statusEl.style.color = '#f87171';
+            statusEl.textContent = '✗ ' + (data.error || 'Registration failed');
+        }
+    } catch (e) {
+        statusEl.style.background = 'rgba(239,68,68,0.1)';
+        statusEl.style.borderColor = 'rgba(239,68,68,0.3)';
+        statusEl.style.color = '#f87171';
+        statusEl.textContent = '✗ Connection error: ' + e.message;
+    }
+}
+
+// ---------------------------------------------------------------
+// OUTBOUND SMS — send a real SMS from the user's virtual number
+// ---------------------------------------------------------------
+async function sendOutboundSMS() {
+    const toInput = document.getElementById('sms-send-to');
+    const bodyInput = document.getElementById('sms-send-body');
+    const resultEl = document.getElementById('sms-send-result');
+    if (!toInput || !bodyInput || !resultEl) return;
+
+    const to = toInput.value.trim();
+    const body = bodyInput.value.trim();
+
+    if (!to) {
+        resultEl.style.display = 'block';
+        resultEl.style.background = 'rgba(239,68,68,0.1)';
+        resultEl.style.color = '#f87171';
+        resultEl.textContent = '⚠ Please enter a recipient phone number.';
+        return;
+    }
+    if (!body) {
+        resultEl.style.display = 'block';
+        resultEl.style.background = 'rgba(239,68,68,0.1)';
+        resultEl.style.color = '#f87171';
+        resultEl.textContent = '⚠ Please enter a message.';
+        return;
+    }
+
+    resultEl.style.display = 'block';
+    resultEl.style.background = 'rgba(96,165,250,0.08)';
+    resultEl.style.color = '#60a5fa';
+    resultEl.textContent = '⟳ Sending secure SMS relay...';
+
+    try {
+        const res = await fetch('/api/v1/twilio/send-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: session.username, to, body })
+        });
+        const data = await res.json();
+        if (data.success) {
+            resultEl.style.background = 'rgba(16,185,129,0.1)';
+            resultEl.style.color = '#10b981';
+            resultEl.textContent = `✓ SMS sent from ${data.from} → ${data.to}`;
+            bodyInput.value = '';
+            // Refresh logs so outbound shows up
+            await fetchVirtualNumberLogs();
+        } else {
+            resultEl.style.background = 'rgba(239,68,68,0.1)';
+            resultEl.style.color = '#f87171';
+            resultEl.textContent = '✗ ' + (data.error || 'SMS send failed');
+        }
+    } catch (e) {
+        resultEl.style.background = 'rgba(239,68,68,0.1)';
+        resultEl.style.color = '#f87171';
+        resultEl.textContent = '✗ Network error: ' + e.message;
+    }
+}
+

@@ -518,10 +518,12 @@ body {
     display: flex;
     width: 100vw;
     height: calc(100vh - 44px); /* Leaving room for auditor console minimized height */
+    overflow: hidden;
     z-index: 5;
 }
 .sidebar {
     width: 280px;
+    height: 100%;
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -531,14 +533,16 @@ body {
     border-left: none;
     flex-shrink: 0;
     z-index: 10;
+    overflow: hidden;
 }
 .sidebar .brand {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 24px;
-    padding-bottom: 15px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 .sidebar .brand h2 {
     font-size: 1.1rem;
@@ -564,10 +568,11 @@ body {
     align-items: center;
     gap: 12px;
     background: rgba(0,0,0,0.25);
-    padding: 10px 14px;
+    padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid var(--border-color);
-    margin-bottom: 20px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 .session-user-info .avatar {
     font-size: 1.4rem;
@@ -597,13 +602,17 @@ body {
 }
 
 .compose-btn {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 
 .nav-links {
     list-style: none;
     flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 .nav-links ul {
     list-style: none;
@@ -658,8 +667,9 @@ body {
     flex-direction: column;
     gap: 12px;
     margin-top: auto;
-    padding-top: 15px;
+    padding-top: 12px;
     border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 .system-node {
     font-size: 0.7rem;
@@ -1910,12 +1920,13 @@ body {
     background: rgba(6, 9, 19, 0.4);
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 20px;
+    padding: 12px;
+    margin-bottom: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    flex-shrink: 0;
+    gap: 8px;
     transition: all 0.3s ease;
 }
 .wallet-widget:hover {
@@ -2163,11 +2174,20 @@ body {
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 100px;
-    aspect-ratio: 16/9;
-    border: 1px solid #8e9192;
+    width: 140px !important;
+    height: 79px !important;
+    object-fit: cover !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 4px;
     z-index: 10;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.mini-pip:hover {
+    transform: scale(1.05);
+    border-color: #10b981 !important;
 }
 .call-controls {
     display: flex;
@@ -2329,3 +2349,203 @@ body {
     align-items: center;
     gap: 8px;
 }
+
+/* Virtual Number Workspace Styles */
+.phone-workspace {
+    display: flex;
+    flex-direction: column;
+}
+.phone-active-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.phone-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 24px;
+    align-items: start;
+}
+.phone-log-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.phone-log-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(96, 165, 250, 0.3);
+}
+.phone-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.phone-log-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.phone-log-type.sms {
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+}
+.phone-log-type.voice {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+}
+.phone-log-from {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+.phone-log-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.phone-log-body {
+    font-size: 0.85rem;
+    color: #e2e8f0;
+    background: rgba(0, 0, 0, 0.15);
+    padding: 8px 10px;
+    border-radius: 4px;
+    border-left: 2px solid #10b981;
+    word-break: break-all;
+}
+.phone-number-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.phone-number-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: #60a5fa;
+    transform: translateX(2px);
+}
+.phone-number-item span {
+    font-family: monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+@media (max-width: 900px) {
+    .phone-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Phone Dialer Keys */
+.dial-key {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+.dial-key:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+.dial-key:active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.4);
+    transform: scale(0.95);
+}
+.dial-key .dial-num {
+    font-size: 1.4rem;
+    font-weight: 300;
+    color: #ffffff;
+    line-height: 1;
+}
+.dial-key .dial-sub {
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Phone Tab Active State */
+.phone-tab.active {
+    color: #10b981 !important;
+    border-bottom-color: #10b981 !important;
+}
+.phone-tab:hover:not(.active) {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* SMS Message Bubbles */
+.sms-bubble {
+    max-width: 75%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    animation: bubbleIn 0.2s ease-out;
+}
+.sms-bubble.outbound {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #ffffff;
+    border-bottom-right-radius: 4px;
+}
+.sms-bubble.inbound {
+    align-self: flex-start;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border-bottom-left-radius: 4px;
+}
+.sms-bubble .sms-time {
+    font-size: 0.65rem;
+    opacity: 0.6;
+    margin-top: 4px;
+    display: block;
+}
+@keyframes bubbleIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Recent activity items */
+.activity-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.2s;
+    cursor: pointer;
+}
+.activity-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
