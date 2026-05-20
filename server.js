@@ -770,8 +770,82 @@ function deriveNormalizedAddress(keyOrAddress) {
     return crypto.createHash('sha256').update(clean).digest('hex');
 }
 
+// Helper: derive standard PEM public key string from private/public key string.
+function derivePublicKeyPEM(keyOrAddress) {
+    if (!keyOrAddress || keyOrAddress === "READ_ONLY") {
+        return "";
+    }
+    
+    const crypto = require('crypto');
+    const clean = keyOrAddress.trim();
+    
+    let result = "";
+    // 1. If it is already a public key PEM, return it directly.
+    if (clean.includes("-----BEGIN PUBLIC KEY-----")) {
+        result = clean;
+    }
+    
+    // 2. If it is a private key PEM, extract and export the public key.
+    else if (clean.includes("-----BEGIN PRIVATE KEY-----") || clean.includes("-----BEGIN EC PRIVATE KEY-----")) {
+        try {
+            const privateKey = crypto.createPrivateKey(clean);
+            const publicKey = crypto.createPublicKey(privateKey);
+            result = publicKey.export({ type: 'spki', format: 'pem' });
+        } catch (err) {
+            console.error("[DERIVE PUB KEY] Failed to derive from private key PEM:", err.message);
+        }
+    }
+    
+    // 3. If it looks like base64 key bytes, try wrapping in PEM headers
+    else if (/^[A-Za-z0-9+/=\s\n\r]+$/.test(clean) && !clean.includes("-----")) {
+        const formatted = `-----BEGIN PUBLIC KEY-----\n${clean}\n-----END PUBLIC KEY-----`;
+        try {
+            const pubKey = crypto.createPublicKey(formatted);
+            result = pubKey.export({ type: 'spki', format: 'pem' });
+        } catch (e) {
+            const formattedPriv = `-----BEGIN PRIVATE KEY-----\n${clean}\n-----END PRIVATE KEY-----`;
+            try {
+                const privKey = crypto.createPrivateKey(formattedPriv);
+                const pubKey = crypto.createPublicKey(privKey);
+                result = pubKey.export({ type: 'spki', format: 'pem' });
+            } catch (err) {}
+        }
+    }
+    
+    if (!result) {
+        result = clean;
+    }
+    
+    // Make sure it ends with exactly one newline \n
+    return result.trim() + "\n";
+}
+
+// Helper: resolve tag or raw key to standard public key PEM
+function resolveRecipientAddress(recipient) {
+    if (!recipient) return "";
+    const clean = recipient.trim();
+    
+    // 1. Treasury/Escrow tag resolution
+    const upper = clean.toUpperCase();
+    if (upper === "@ALUMNI.SATOSHI" || upper === "SATOSHI" || clean.toLowerCase() === "alumnimail.escrow") {
+        return "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAENwPfFbba+A9l6uFutbQucAOUgPQNujNn\nTl+oXgr5F0U+SPynvHJbC07kXms5iYwEAtqT1D3ErWnPX+a6XE7NtQ==\n-----END PUBLIC KEY-----\n";
+    }
+    
+    // 2. If it's a standard user tag (e.g. @ALUMNI.SOMETHING)
+    if (clean.startsWith("@ALUMNI.")) {
+        const tagValue = clean.substring(8);
+        if (/^[A-Za-z0-9+/=\s\n\r]+$/.test(tagValue) && tagValue.length > 20) {
+            // Restore PEM public key headers
+            return `-----BEGIN PUBLIC KEY-----\n${tagValue.trim()}\n-----END PUBLIC KEY-----\n`;
+        }
+    }
+    
+    // 3. Otherwise treat as a raw address/key and derive standard PEM public key
+    return derivePublicKeyPEM(clean);
+}
+
 app.post('/api/v1/wallet/balance', async (req, res) => {
-    const { tag, email } = req.body;
+    const { tag, email, keyOrAddress } = req.body;
     if (!tag) {
         return res.status(400).json({ error: "Missing wallet tag parameter." });
     }
@@ -783,21 +857,35 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
     
     if (L1_RPC_URL) {
         try {
-            // Relaying query to the live custom JSON/HTTP L1 node API
-            const rpcResponse = await fetch(`${L1_RPC_URL}/api/wallet/query`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tag, email }),
-                timeout: 3000
-            });
-            const l1Data = await rpcResponse.json();
+            // Resolve the standard PEM public key address
+            let derivedPEM = "";
+            if (tag.toUpperCase() === "@ALUMNI.SATOSHI" || tag.toUpperCase() === "SATOSHI") {
+                derivedPEM = resolveRecipientAddress("@ALUMNI.SATOSHI");
+            } else if (keyOrAddress) {
+                derivedPEM = derivePublicKeyPEM(keyOrAddress);
+            } else {
+                derivedPEM = resolveRecipientAddress(tag);
+            }
             
-            return res.json({
-                success: true,
-                tag: tag,
-                balance: l1Data.balance || 0,
-                l1_status: "LIVE_LEDGER"
-            });
+            if (derivedPEM && derivedPEM.includes("-----BEGIN PUBLIC KEY-----")) {
+                const rpcResponse = await fetch(`${L1_RPC_URL}/balance/${encodeURIComponent(derivedPEM)}`, {
+                    method: 'GET',
+                    timeout: 3000
+                });
+                if (rpcResponse.ok) {
+                    const l1Data = await rpcResponse.json();
+                    return res.json({
+                        success: true,
+                        tag: tag,
+                        balance: l1Data.balance || 0,
+                        l1_status: "LIVE_LEDGER"
+                    });
+                } else {
+                    console.warn("[L1 RPC BALANCE ERROR] Node responded with status:", rpcResponse.status);
+                }
+            } else {
+                console.warn("[L1 RPC BALANCE] Could not derive valid PEM public key from:", keyOrAddress || tag);
+            }
         } catch (err) {
             console.error("[L1 RPC CONNECTION ERROR] Live blockchain API query failed:", err.message);
         }
@@ -833,6 +921,7 @@ app.post('/api/v1/wallet/send', async (req, res) => {
     const fromTag = req.body.fromTag || req.body.senderTag;
     const recipient = req.body.recipient || req.body.recipientTag;
     const amount = req.body.amount;
+    const pemPrivateKey = req.body.pemPrivateKey;
     
     if (!fromTag || !recipient || !amount) {
         return res.status(400).json({ error: "Missing required transaction parameters." });
@@ -849,33 +938,54 @@ app.post('/api/v1/wallet/send', async (req, res) => {
 
     const L1_RPC_URL = process.env.L1_RPC_URL;
     
-    if (L1_RPC_URL) {
+    if (L1_RPC_URL && pemPrivateKey && pemPrivateKey !== "READ_ONLY") {
         try {
-            // Relaying signed transfer request to the live custom L1 node API
-            const rpcResponse = await fetch(`${L1_RPC_URL}/api/wallet/transfer`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    from_tag: fromTag,
-                    recipient: recipient,
-                    amount: numericAmount,
-                    tx_hash: txHash
-                }),
-                timeout: 3000
-            });
-            const l1Data = await rpcResponse.json();
+            // Derive sender's public key PEM
+            const fromAddress = derivePublicKeyPEM(pemPrivateKey);
+            // Resolve recipient's public key PEM
+            const toAddress = resolveRecipientAddress(recipient);
             
-            if (l1Data.success) {
-                auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'SUCCESS' WHERE tx_hash = '${txHash}';`);
-                return res.json({
-                    success: true,
-                    txHash: txHash,
-                    newBalance: l1Data.newBalance || 0,
-                    l1_status: "LIVE_LEDGER"
+            if (fromAddress && toAddress && fromAddress.includes("-----BEGIN PUBLIC KEY-----") && toAddress.includes("-----BEGIN PUBLIC KEY-----")) {
+                // Relaying signed transfer request to the live custom L1 node API
+                const rpcResponse = await fetch(`${L1_RPC_URL}/transaction/sign-and-send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        privateKey: pemPrivateKey,
+                        fromAddress: fromAddress,
+                        toAddress: toAddress,
+                        amount: numericAmount
+                    }),
+                    timeout: 5000
                 });
+                
+                if (rpcResponse.ok) {
+                    const l1Data = await rpcResponse.json();
+                    const actualTxHash = l1Data.hash || txHash;
+                    auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'SUCCESS' WHERE tx_hash = '${actualTxHash}';`);
+                    
+                    // Fetch updated sender balance to return
+                    let latestBalance = 0;
+                    try {
+                        const balRes = await fetch(`${L1_RPC_URL}/balance/${encodeURIComponent(fromAddress)}`, { timeout: 2000 });
+                        const balData = await balRes.json();
+                        latestBalance = balData.balance || 0;
+                    } catch (e) {}
+                    
+                    return res.json({
+                        success: true,
+                        txHash: actualTxHash,
+                        newBalance: latestBalance,
+                        l1_status: "LIVE_LEDGER"
+                    });
+                } else {
+                    const errorData = await rpcResponse.json().catch(() => ({}));
+                    const errMsg = errorData.error || `L1 Node responded with status ${rpcResponse.status}`;
+                    auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
+                    return res.status(400).json({ error: errMsg });
+                }
             } else {
-                auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
-                return res.status(400).json({ error: l1Data.error || "Transaction rejected by L1 validator pool." });
+                console.warn("[L1 RPC SEND] Could not derive valid sender or recipient PEM public key.");
             }
         } catch (err) {
             console.error("[L1 TX BROADCAST ERROR] Failed to send to L1 RPC:", err.message);
