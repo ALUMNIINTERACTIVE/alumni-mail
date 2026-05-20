@@ -228,6 +228,9 @@
                         <li id="nav-calendar" onclick="switchView('calendar')">
                             <span class="nav-icon"></span> E2EE Calendar
                         </li>
+                        <li id="nav-calls" onclick="switchView('calls')">
+                            <span class="nav-icon"><span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle; color: #10b981;">call</span></span> Secure Calls
+                        </li>
                         <li class="nav-divider">PRO FEATURES</li>
                         <li id="nav-domains" onclick="switchView('domains')">
                             <span class="nav-icon"></span> Custom Domains
@@ -555,6 +558,98 @@
                             <div id="agenda-meetings-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
                                 <div class="text-center" style="color: var(--text-muted); margin-top: 20px; font-size: 0.85rem;">
                                     Select a day to view decrypted meetings.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- VIEW C: E2EE SECURE CALLS HUB -->
+                <div id="view-calls" class="calls-workspace glass-panel view-section hidden">
+                    <div class="view-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div>
+                            <h2>E2EE Call Hub</h2>
+                            <p class="subtitle">Initiate peer-to-peer end-to-end encrypted voice and video calls directly through secure WebRTC signaling relays.</p>
+                        </div>
+                    </div>
+
+                    <div class="calls-layout" style="display: grid; grid-template-columns: 1fr 340px; gap: 20px; margin-top: 20px;">
+                        
+                        <!-- DIRECT DIALER & ACTIVE SESSION CARD -->
+                        <div class="calls-main-card glass-panel" style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+                            
+                            <!-- DIALER CONTAINER -->
+                            <div class="dialer-section">
+                                <h3 style="margin-top: 0; margin-bottom: 12px; font-weight: 600; font-size: 1.1rem; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                                    <span class="material-symbols-outlined" style="color: #10b981;">dialpad</span> Direct Dial Recipient
+                                </h3>
+                                <p class="helper-text" style="margin-bottom: 15px; font-size: 0.8rem; color: var(--text-muted);">
+                                    Enter any secure ID or custom alias ending in <code>@alumnimail.app</code> (or standard custom domain alias) to establish a secure peer tunnel.
+                                </p>
+                                <div class="dialer-input-group" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                                    <div class="input-wrapper" style="flex: 1;">
+                                        <input type="text" id="dial-peer-input" class="input-field" placeholder="peer@alumnimail.app" style="width: 100%;">
+                                    </div>
+                                </div>
+                                <div class="dialer-actions" style="display: flex; gap: 12px;">
+                                    <button class="btn primary glow" onclick="dialFromHub('voice')" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600;">
+                                        <span class="material-symbols-outlined">call</span> Secure Voice Call
+                                    </button>
+                                    <button class="btn primary glow" onclick="dialFromHub('video')" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; background: #10b981; border-color: #10b981; color: #131313;">
+                                        <span class="material-symbols-outlined">videocam</span> Secure Video Call
+                                    </button>
+                                </div>
+                            </div>
+
+                            <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 5px 0;">
+
+                            <!-- ACTIVE SESSION MONITOR -->
+                            <div class="session-monitor-section">
+                                <h3 style="margin-top: 0; margin-bottom: 12px; font-weight: 600; font-size: 1.1rem; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                                    <span class="material-symbols-outlined" style="color: #10b981;">monitor_heart</span> Active E2EE Connection Monitor
+                                </h3>
+                                <div id="hub-session-empty" class="glass-panel" style="padding: 20px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border-color); background: rgba(0, 0, 0, 0.15);">
+                                    <span class="material-symbols-outlined" style="font-size: 2rem; color: var(--text-dark); margin-bottom: 8px;">leak_remove</span>
+                                    <p style="margin: 0; font-size: 0.85rem;">No active E2EE signaling tunnel established. Use the dialer above or contact list to connect.</p>
+                                </div>
+                                <div id="hub-session-active" class="glass-panel hidden" style="padding: 16px; border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.04); display: flex; flex-direction: column; gap: 12px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <span class="status-dot pulsing green"></span>
+                                            <div>
+                                                <div id="hub-session-peer" class="font-mono" style="font-weight: 700; color: #ffffff; font-size: 0.9rem;">peer@alumnimail.app</div>
+                                                <div id="hub-session-status" style="font-size: 0.75rem; color: #10b981; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-top: 2px;">E2EE Connected (1024-bit key)</div>
+                                            </div>
+                                        </div>
+                                        <button class="btn secondary trash" onclick="hangupCall()" style="padding: 8px 12px; font-weight: 600; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px;">call_end</span> Hang Up
+                                        </button>
+                                    </div>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button class="btn secondary-sm" id="hub-btn-toggle-mic" onclick="toggleLocalAudio()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.75rem;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px;">mic</span> Mic
+                                        </button>
+                                        <button class="btn secondary-sm" id="hub-btn-toggle-cam" onclick="toggleLocalVideo()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.75rem;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px;">videocam</span> Cam
+                                        </button>
+                                        <button class="btn secondary-sm" id="hub-btn-share-screen" onclick="toggleScreenShare()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 0.75rem;">
+                                            <span class="material-symbols-outlined" style="font-size: 14px;">screen_share</span> Screen
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- QUICK DIAL CONTACTS DIRECTORY -->
+                        <div class="calls-contacts-card glass-panel" style="padding: 20px; display: flex; flex-direction: column; gap: 15px; height: 100%; min-height: 380px;">
+                            <h3 style="margin-top: 0; margin-bottom: 0; font-weight: 600; font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; display: flex; align-items: center; gap: 8px; color: #ffffff;">
+                                <span class="material-symbols-outlined" style="color: #10b981;">contact_phone</span> E2EE Contacts
+                            </h3>
+                            <div id="hub-contacts-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Populated dynamically -->
+                                <div class="text-center" style="color: var(--text-muted); margin-top: 20px; font-size: 0.85rem;">
+                                    No secure correspondents found.
                                 </div>
                             </div>
                         </div>
