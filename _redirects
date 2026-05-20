@@ -1,0 +1,6 @@
+# Alumni Mail - Cloudflare Routing Rules
+# Ensures API requests are forwarded to the Express backend, not served as static files.
+# Prevents Cloudflare's "Always Online" fallback from intercepting API GET requests.
+
+# All API routes → pass through to Node.js backend (no redirect, just disable static fallback)
+/api/* /api/:splat 200

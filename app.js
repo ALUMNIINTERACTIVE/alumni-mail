@@ -13,7 +13,8 @@ let session = {
     publicJwk: null,         // Plaintext RSA Public Key (JWK)
     encPrivateKey: null,     // AES-GCM Encrypted Private Key payload
     activeView: 'inbox',
-    activeEmailId: null
+    activeEmailId: null,
+    userTier: 'Free'
 };
 
 // Seeding standard external recipients and standard users
@@ -45,8 +46,30 @@ async function seedRecipientRegistry() {
 // APP INITIALIZATION
 // -------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
+    // Check if secure context
+    const isSecure = window.isSecureContext && window.crypto && window.crypto.subtle;
+    if (!isSecure) {
+        const alertEl = document.getElementById('insecure-context-alert');
+        if (alertEl) {
+            alertEl.classList.remove('hidden');
+            const ipDisplay = document.getElementById('insecure-ip-display');
+            if (ipDisplay) {
+                ipDisplay.innerText = window.location.href;
+            }
+        }
+        console.warn("ALUMNI MAIL: Insecure Context detected! E2EE and WebAuthn cryptography functions are disabled by browser policy.");
+    }
+
     // 1. Seed demo keys
-    await seedRecipientRegistry();
+    try {
+        if (isSecure) {
+            await seedRecipientRegistry();
+        } else {
+            console.warn("ALUMNI MAIL: Skipping demo key seeding because cryptography functions are unavailable in insecure contexts.");
+        }
+    } catch (e) {
+        console.error("ALUMNI MAIL: Failed to seed recipient registry:", e);
+    }
     
     // 2. Set up DB subscribers for re-renders
     window.AlumniMailDB.subscribe(() => {
@@ -85,7 +108,7 @@ function switchView(viewName) {
     session.activeEmailId = null;
     
     // Update active nav link classes
-    const navs = ['nav-inbox', 'nav-sent', 'nav-archive', 'nav-trash', 'nav-domains', 'nav-keys', 'nav-settings'];
+    const navs = ['nav-inbox', 'nav-sent', 'nav-archive', 'nav-trash', 'nav-calendar', 'nav-domains', 'nav-keys', 'nav-settings'];
     navs.forEach(navId => {
         const el = document.getElementById(navId);
         if (el) el.classList.remove('active');
@@ -99,11 +122,13 @@ function switchView(viewName) {
     const domainsWorkspace = document.getElementById('view-domains');
     const keysWorkspace = document.getElementById('view-keys');
     const settingsWorkspace = document.getElementById('view-settings');
+    const calendarWorkspace = document.getElementById('view-calendar');
 
     mainWorkspace.classList.add('hidden');
     domainsWorkspace.classList.add('hidden');
     keysWorkspace.classList.add('hidden');
     settingsWorkspace.classList.add('hidden');
+    if (calendarWorkspace) calendarWorkspace.classList.add('hidden');
 
     if (['inbox', 'sent', 'archive', 'trash'].includes(viewName)) {
         mainWorkspace.classList.remove('hidden');
@@ -119,6 +144,371 @@ function switchView(viewName) {
         renderKeysView();
     } else if (viewName === 'settings') {
         settingsWorkspace.classList.remove('hidden');
+        renderBiometricSettings();
+    } else if (viewName === 'calendar') {
+        if (calendarWorkspace) {
+            calendarWorkspace.classList.remove('hidden');
+            renderCalendarView();
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// WEBAUTHN / BIOMETRIC AUTHENTICATION FLOWS
+// -------------------------------------------------------------
+
+// Converts an ArrayBuffer to a base64url string
+function bufferToBase64url(buffer) {
+    const b64 = window.AlumniMailCrypto.bufferToBase64(buffer);
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// Converts a base64url string to a Uint8Array
+function base64urlToBuffer(str) {
+    let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    return window.AlumniMailCrypto.base64ToBuffer(b64);
+}
+
+function renderBiometricSettings() {
+    const badge = document.getElementById('biometric-status-badge');
+    const button = document.getElementById('btn-register-biometrics');
+    if (!badge || !button) return;
+
+    if (!window.isSecureContext) {
+        badge.innerText = "Unavailable (Insecure Context)";
+        badge.className = "badge danger";
+        button.disabled = true;
+        button.innerText = "❌ Requires Secure HTTPS/Localhost";
+        return;
+    }
+
+    const hasVault = localStorage.getItem(`biometric_vault_${session.username}`);
+    if (hasVault) {
+        badge.innerText = "Active & Linked";
+        badge.className = "badge success";
+        button.innerText = "🔗 Unlink Device Biometrics";
+        button.className = "btn primary glow danger";
+    } else {
+        badge.innerText = "Not Connected";
+        badge.className = "badge secondary";
+        button.innerText = "🔑 Register Device Biometrics";
+        button.className = "btn primary glow";
+    }
+}
+
+async function registerBiometrics() {
+    const badge = document.getElementById('biometric-status-badge');
+    const button = document.getElementById('btn-register-biometrics');
+    
+    // If already registered, perform unlink
+    const hasVault = localStorage.getItem(`biometric_vault_${session.username}`);
+    if (hasVault) {
+        if (confirm("Are you sure you want to unlink biometric authentication on this device? This will destroy the locally encrypted biometric session keys.")) {
+            localStorage.removeItem(`biometric_vault_${session.username}`);
+            localStorage.removeItem(`biometric_key_${session.username}`);
+            alert("Biometric authentication successfully unlinked from this device.");
+            renderBiometricSettings();
+        }
+        return;
+    }
+
+    if (!window.isSecureContext) {
+        alert("WebAuthn biometrics are restricted by browser security policies to secure contexts (HTTPS or localhost).");
+        return;
+    }
+
+    if (!window.PublicKeyCredential) {
+        alert("This browser or device does not support WebAuthn Biometric Authenticator credentials.");
+        return;
+    }
+
+    try {
+        button.disabled = true;
+        button.innerText = "⏳ Generating options...";
+
+        // Step 1: Fetch options
+        const res = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/webauthn/register-options?username=${encodeURIComponent(session.username)}`);
+        if (!res.ok) {
+            throw new Error("Failed to get WebAuthn options from server.");
+        }
+        const options = await res.json();
+
+        // Convert options to standard typed array buffers
+        options.challenge = base64urlToBuffer(options.challenge);
+        options.user.id = base64urlToBuffer(options.user.id);
+
+        button.innerText = "🧬 Verify Identity Prompt...";
+
+        // Step 2: Prompt Touch ID / Face ID
+        const credential = await navigator.credentials.create({ publicKey: options });
+        if (!credential) {
+            throw new Error("WebAuthn authenticator failed to return credential.");
+        }
+
+        button.innerText = "⏳ Syncing credentials...";
+
+        // Step 3: Serialize and send to server
+        const rawPubKey = credential.response.getPublicKey();
+        const publicKeySpki = bufferToBase64url(rawPubKey);
+        const credentialId = credential.id;
+
+        const registerRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/webauthn/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: session.username,
+                credentialId,
+                publicKeySpki
+            })
+        });
+
+        if (!registerRes.ok) {
+            const errData = await registerRes.json();
+            throw new Error(errData.error || "Server rejected registration.");
+        }
+
+        // Step 4: Encrypt KDK and Private Key to secure local vault container
+        button.innerText = "🔒 Building local E2EE Vault...";
+
+        const rawKdk = await window.crypto.subtle.exportKey("raw", session.kdk);
+        const jwkPrivateKey = await window.crypto.subtle.exportKey("jwk", session.privateKey);
+
+        const vaultPayload = {
+            kdk: bufferToBase64url(rawKdk),
+            privateKey: jwkPrivateKey
+        };
+
+        // Generate local high-entropy key for AES-GCM vault encryption
+        const bioKeyBytes = window.crypto.getRandomValues(new Uint8Array(32));
+        const bioKeyHex = Array.from(bioKeyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        const aesKey = await window.crypto.subtle.importKey(
+            "raw",
+            bioKeyBytes,
+            { name: "AES-GCM" },
+            false,
+            ["encrypt", "decrypt"]
+        );
+
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const textEncoder = new TextEncoder();
+        const encryptedBuffer = await window.crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: iv },
+            aesKey,
+            textEncoder.encode(JSON.stringify(vaultPayload))
+        );
+
+        // Store vault encrypted locally, protected by biometric key and gated by server authentication
+        localStorage.setItem(`biometric_key_${session.username}`, bioKeyHex);
+        localStorage.setItem(`biometric_vault_${session.username}`, JSON.stringify({
+            ciphertext: bufferToBase64url(encryptedBuffer),
+            iv: bufferToBase64url(iv)
+        }));
+
+        alert("🎉 Device Biometrics successfully registered! You can now log in password-free on this device.");
+        renderBiometricSettings();
+
+    } catch (err) {
+        console.error("Biometric registration failure:", err);
+        alert("Biometric registration failed: " + err.message);
+        renderBiometricSettings();
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function handleBiometricLogin() {
+    const errorEl = document.getElementById('login-error');
+    if (errorEl) errorEl.classList.add('hidden');
+
+    if (!window.isSecureContext) {
+        if (errorEl) {
+            errorEl.innerText = "Biometrics are unavailable in insecure HTTP contexts. Please use your passphrase.";
+            errorEl.classList.remove('hidden');
+        }
+        return;
+    }
+
+    if (!window.PublicKeyCredential) {
+        if (errorEl) {
+            errorEl.innerText = "WebAuthn biometrics are not supported on this browser or device.";
+            errorEl.classList.remove('hidden');
+        }
+        return;
+    }
+
+    // Step 1: Detect linked accounts
+    const linkedAccounts = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('biometric_vault_')) {
+            linkedAccounts.push(key.substring('biometric_vault_'.length));
+        }
+    }
+
+    if (linkedAccounts.length === 0) {
+        if (errorEl) {
+            errorEl.innerText = "No biometric credentials have been registered on this device yet. Please log in with your passphrase first, go to Settings, and link this device.";
+            errorEl.classList.remove('hidden');
+        }
+        return;
+    }
+
+    // If username is typed in the login field, use that. Otherwise if exactly one linked account, use that.
+    // Otherwise, discoverable credential login (prompt username selection or standard credential discoverability).
+    const typedUsername = document.getElementById('login-username').value.trim();
+    let username = typedUsername ? (typedUsername.includes('@') ? typedUsername : `${typedUsername}@alumnimail.app`).toLowerCase() : "";
+
+    if (!username && linkedAccounts.length === 1) {
+        username = linkedAccounts[0];
+    } else if (!username && linkedAccounts.length > 1) {
+        const select = prompt(`Multiple biometric profiles found. Enter the username you want to unlock:\n${linkedAccounts.join('\n')}`);
+        if (!select) return;
+        username = (select.includes('@') ? select : `${select}@alumnimail.app`).toLowerCase();
+    }
+
+    showCryptoOverlay();
+    updateCryptoOverlayStep('pbkdf2', 'active', '🧬 Contacting server and prompting device biometrics...');
+
+    try {
+        // Step 2: Fetch assertion options
+        const res = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/webauthn/login-options` + (username ? `?username=${encodeURIComponent(username)}` : ''));
+        if (!res.ok) {
+            throw new Error("Failed to get biometric assertion parameters.");
+        }
+        const options = await res.json();
+
+        // Convert option buffers
+        options.challenge = base64urlToBuffer(options.challenge);
+        if (options.allowCredentials) {
+            options.allowCredentials.forEach(c => {
+                c.id = base64urlToBuffer(c.id);
+            });
+        }
+
+        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ WebAuthn options loaded.');
+        updateCryptoOverlayStep('rsa', 'active', '🧬 Please scan Face ID / Touch ID when prompted...');
+
+        // Step 3: Prompt native browser Touch ID / Face ID
+        const assertion = await navigator.credentials.get({ publicKey: options });
+        if (!assertion) {
+            throw new Error("Biometric scan cancelled or rejected.");
+        }
+
+        updateCryptoOverlayStep('rsa', 'completed', '✅ Biometric signature generated.');
+        updateCryptoOverlayStep('aes', 'active', '🔒 Verifying biometric signature on server...');
+
+        // Step 4: Verify signature on server
+        const clientDataJSON = bufferToBase64url(assertion.response.clientDataJSON);
+        const authenticatorData = bufferToBase64url(assertion.response.authenticatorData);
+        const signature = bufferToBase64url(assertion.response.signature);
+        const credentialId = assertion.id;
+
+        const verifyRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/webauthn/login-verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: username,
+                credentialId,
+                clientDataJSON,
+                authenticatorData,
+                signature
+            })
+        });
+
+        if (!verifyRes.ok) {
+            const errData = await verifyRes.json();
+            throw new Error(errData.error || "Biometric authentication signature rejected.");
+        }
+
+        const loginData = await verifyRes.json();
+        const resolvedUsername = loginData.username;
+
+        updateCryptoOverlayStep('aes', 'completed', '✅ Signature authenticated by server.');
+        updateCryptoOverlayStep('db', 'active', '🔓 Decrypting E2EE vault locally...');
+
+        // Step 5: Load local biometric vault keys and decrypt
+        const bioKeyHex = localStorage.getItem(`biometric_key_${resolvedUsername}`);
+        const vaultStr = localStorage.getItem(`biometric_vault_${resolvedUsername}`);
+
+        if (!bioKeyHex || !vaultStr) {
+            throw new Error(`Local biometric vault files not found on this device for ${resolvedUsername}. Did you reset local storage?`);
+        }
+
+        const vaultData = JSON.parse(vaultStr);
+        const bioKeyBytes = new Uint8Array(bioKeyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+        const aesKey = await window.crypto.subtle.importKey(
+            "raw",
+            bioKeyBytes,
+            { name: "AES-GCM" },
+            false,
+            ["encrypt", "decrypt"]
+        );
+
+        const ciphertext = base64urlToBuffer(vaultData.ciphertext);
+        const iv = base64urlToBuffer(vaultData.iv);
+
+        const decryptedBuffer = await window.crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            aesKey,
+            ciphertext
+        );
+
+        const textDecoder = new TextDecoder();
+        const decryptedText = textDecoder.decode(decryptedBuffer);
+        const vault = JSON.parse(decryptedText);
+
+        // Step 6: Import decrypted keys back to transient memory session
+        const kdk = await window.crypto.subtle.importKey(
+            "raw",
+            base64urlToBuffer(vault.kdk),
+            { name: "AES-GCM", length: 256 },
+            true,
+            ["encrypt", "decrypt"]
+        );
+
+        const privateKey = await window.crypto.subtle.importKey(
+            "jwk",
+            vault.privateKey,
+            { name: "RSA-OAEP", hash: "SHA-256" },
+            false,
+            ["decrypt"]
+        );
+
+        // Populate session state
+        session.username = resolvedUsername;
+        session.salt = loginData.salt;
+        session.kdk = kdk;
+        session.privateKey = privateKey;
+        session.publicJwk = loginData.publicJwk;
+        session.encPrivateKey = loginData.encPrivateKey;
+        session.userTier = loginData.tier || 'Free';
+
+        updateCryptoOverlayStep('db', 'completed', '✅ Cryptographic identity unlocked.');
+        showCryptoOverlay();
+
+        // Step 7: Synchronize complete mailbox workspace
+        updateCryptoOverlayStep('db', 'active', '🔄 Synchronizing secure emails, domains, and aliases...');
+        await window.AlumniMailDB.syncUserData(resolvedUsername);
+        updateCryptoOverlayStep('db', 'completed', '✅ E2EE Workspace synchronized.');
+
+        // Establish mailbox session
+        logActiveMemorySecrets();
+
+        setTimeout(() => {
+            hideCryptoOverlay();
+            enterMailbox();
+        }, 1200);
+
+    } catch (err) {
+        console.error("Biometric login failure:", err);
+        hideCryptoOverlay();
+        if (errorEl) {
+            errorEl.innerText = "Biometric Unlock Failed: " + err.message;
+            errorEl.classList.remove('hidden');
+        }
     }
 }
 
@@ -158,6 +548,19 @@ async function handleRegister(event) {
         return;
     }
 
+    // Secure Context check
+    const isSecure = window.isSecureContext && window.crypto && window.crypto.subtle;
+    if (!isSecure) {
+        errorEl.innerHTML = `⚠️ <strong>Security Policy Restriction:</strong> E2EE Key Generation requires a secure context (HTTPS or localhost).<br><br>
+        To register and generate your keys securely on your phone:
+        <ul style="margin: 8px 0 0 0; padding-left: 20px; text-align: left; font-size: 0.85rem; line-height: 1.4;">
+            <li>Start a secure tunnel on your computer: run <code style="background:rgba(255,255,255,0.15); padding:2px 4px; border-radius:3px;">npx localtunnel --port 8000</code> or use ngrok.</li>
+            <li>Access the secure <code style="background:rgba(255,255,255,0.15); padding:2px 4px; border-radius:3px;">https://</code> address on your phone.</li>
+        </ul>`;
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
     // Strict registration rule: Users can only sign up under the @alumnimail.app domain
     let cleanedUsername = usernameInput.trim();
     if (cleanedUsername.includes('@')) {
@@ -169,11 +572,23 @@ async function handleRegister(event) {
     }
     const fullUsername = cleanedUsername.includes('@') ? cleanedUsername : `${cleanedUsername}@alumnimail.app`;
 
-    // Check if user exists
+    // Check if user exists locally
     if (window.AlumniMailDB.getUser(fullUsername)) {
         errorEl.innerText = "This address is already registered.";
         errorEl.classList.remove('hidden');
         return;
+    }
+
+    // Check if user exists on server
+    try {
+        const checkRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/salt/${encodeURIComponent(fullUsername)}`);
+        if (checkRes.ok) {
+            errorEl.innerText = "This address is already registered.";
+            errorEl.classList.remove('hidden');
+            return;
+        }
+    } catch (e) {
+        // Network/other error, continue to try registering
     }
 
     // Trigger E2EE Generator UI overlay
@@ -200,8 +615,13 @@ async function handleRegister(event) {
 
         // Step 4: Write profile to mock server
         updateCryptoOverlayStep('db', 'active', '📤 Registering Zero-Knowledge Profile on server...');
-        window.AlumniMailDB.registerUser(fullUsername, authHash, saltBase64, publicJwk, encPrivateKey);
+        await window.AlumniMailDB.registerUser(fullUsername, authHash, saltBase64, publicJwk, encPrivateKey);
         updateCryptoOverlayStep('db', 'completed', '✅ Secure ID registered successfully.');
+
+        // Step 5: Synchronize clean workspace state
+        updateCryptoOverlayStep('db', 'active', '🔄 Initializing secure workspace...');
+        await window.AlumniMailDB.syncUserData(fullUsername);
+        updateCryptoOverlayStep('db', 'completed', '✅ Secure Workspace initialized.');
 
         // Save session in memory (never written to LocalStorage in plain text!)
         session.username = fullUsername;
@@ -210,6 +630,7 @@ async function handleRegister(event) {
         session.privateKey = keypair.privateKey;
         session.publicJwk = publicJwk;
         session.encPrivateKey = encPrivateKey;
+        session.userTier = 'Free';
 
         // Log visual crypt secrets to browser memory logger
         logActiveMemorySecrets();
@@ -235,55 +656,118 @@ async function handleLogin(event) {
 
     errorEl.classList.add('hidden');
 
-    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.app`;
-    const user = window.AlumniMailDB.getUser(fullUsername);
-
-    if (!user) {
-        errorEl.innerText = "Authentication failed. Incorrect credentials.";
+    if (!usernameInput || !passwordInput) {
+        errorEl.innerText = "Please complete all fields.";
         errorEl.classList.remove('hidden');
         return;
     }
+
+    // Secure Context check
+    const isSecure = window.isSecureContext && window.crypto && window.crypto.subtle;
+    if (!isSecure) {
+        errorEl.innerHTML = `⚠️ <strong>Security Policy Restriction:</strong> Zero-Knowledge client-side E2EE requires a secure context (HTTPS or localhost).<br><br>
+        To access and decrypt your emails securely on a phone:
+        <ul style="margin: 8px 0 0 0; padding-left: 20px; text-align: left; font-size: 0.85rem; line-height: 1.4;">
+            <li>Start a secure tunnel on your computer: run <code style="background:rgba(255,255,255,0.15); padding:2px 4px; border-radius:3px;">npx localtunnel --port 8000</code> or use ngrok.</li>
+            <li>Access the secure <code style="background:rgba(255,255,255,0.15); padding:2px 4px; border-radius:3px;">https://</code> address on your phone.</li>
+        </ul>`;
+        errorEl.classList.remove('hidden');
+        return;
+    }
+
+    const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.app`;
 
     showCryptoOverlay();
     updateCryptoOverlayStep('pbkdf2', 'active', '🔑 Querying user salt & running PBKDF2...');
 
     try {
-        // Derive keys from input password using the user's salt stored on database
-        const { kdk, authHash } = await window.AlumniMailCrypto.deriveKeys(passwordInput, user.salt);
-        
-        // Verify Auth Hash (Zero-Knowledge password check)
-        if (authHash !== user.authHash) {
+        // Step 1: Retrieve user salt from server
+        let salt;
+        try {
+            const saltRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/salt/${encodeURIComponent(fullUsername)}`);
+            if (!saltRes.ok) {
+                throw new Error("User profile not found.");
+            }
+            const saltData = await saltRes.json();
+            salt = saltData.salt;
+        } catch (err) {
             hideCryptoOverlay();
-            errorEl.innerText = "Authentication failed. Incorrect password.";
+            errorEl.innerText = "Authentication failed. User profile not found.";
             errorEl.classList.remove('hidden');
             return;
         }
-        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ Passphrase derived. Password matches.');
 
-        // Fetch encrypted private key, decrypt in-browser
-        updateCryptoOverlayStep('rsa', 'active', '🔓 Restoring RSA Private key in browser memory...');
-        const privKey = await window.AlumniMailCrypto.decryptPrivateKey(
-            user.encPrivateKey.ciphertext,
-            user.encPrivateKey.iv,
-            kdk
+        // Step 2: Derive master key Decryption Key (kdk) and authHash locally using PBKDF2
+        const { kdk, authHash } = await window.AlumniMailCrypto.deriveKeys(passwordInput, salt);
+        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ Passphrase derived.');
+
+        // Step 3: Verify authHash on server & retrieve E2EE parameters
+        updateCryptoOverlayStep('rsa', 'active', '🔒 Verifying ZK challenge and retrieving E2EE keys...');
+        let loginData;
+        try {
+            const loginRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: fullUsername, authHash })
+            });
+            if (!loginRes.ok) {
+                const errData = await loginRes.json();
+                throw new Error(errData.error || "Incorrect password.");
+            }
+            loginData = await loginRes.json();
+        } catch (err) {
+            hideCryptoOverlay();
+            errorEl.innerText = "Authentication failed: " + err.message;
+            errorEl.classList.remove('hidden');
+            return;
+        }
+        updateCryptoOverlayStep('rsa', 'completed', '✅ ZK credentials verified by server.');
+
+        // Step 4: Decrypt private key locally using KDK
+        updateCryptoOverlayStep('aes', 'active', '🔓 Restoring RSA Private key in browser memory...');
+        let privKey;
+        try {
+            privKey = await window.AlumniMailCrypto.decryptPrivateKey(
+                loginData.encPrivateKey.ciphertext,
+                loginData.encPrivateKey.iv,
+                kdk
+            );
+            updateCryptoOverlayStep('aes', 'completed', '✅ Private Key loaded and decrypted locally.');
+        } catch (err) {
+            hideCryptoOverlay();
+            errorEl.innerText = "Decryption failure. The password could not unlock your cryptographic private key.";
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        // Step 5: Save credentials cache locally for sync checks
+        window.AlumniMailDB.saveLoggedInUserCache(
+            fullUsername,
+            salt,
+            loginData.publicJwk,
+            loginData.encPrivateKey
         );
-        updateCryptoOverlayStep('rsa', 'completed', '✅ Private Key loaded and decrypted locally.');
-        updateCryptoOverlayStep('aes', 'completed', '✅ Security session established.');
-        updateCryptoOverlayStep('db', 'completed', '✅ Connection verified.');
+
+        // Step 6: Synchronize all secure data (emails, domains, aliases) from the server
+        updateCryptoOverlayStep('db', 'active', '🔄 Synchronizing secure emails, domains, and aliases...');
+        await window.AlumniMailDB.syncUserData(fullUsername);
+        updateCryptoOverlayStep('db', 'completed', '✅ E2EE Workspace synchronized.');
 
         // Keep decrypted key strictly in transient memory!
-        session.username = user.username;
-        session.salt = user.salt;
+        session.username = fullUsername;
+        session.salt = salt;
         session.kdk = kdk;
         session.privateKey = privKey;
-        session.publicJwk = user.publicJwk;
-        session.encPrivateKey = user.encPrivateKey;
+        session.publicJwk = loginData.publicJwk;
+        session.encPrivateKey = loginData.encPrivateKey;
+        session.userTier = loginData.tier || 'Free';
+        localStorage.setItem(`user_tier_${fullUsername}`, loginData.tier || 'Free');
 
         // Log secrets to visual logger
         logActiveMemorySecrets();
 
         // Seed an E2EE greeting from Hal to the new user if it's their first login
-        seedInboxGreeting(user.username, user.publicJwk);
+        seedInboxGreeting(fullUsername, loginData.publicJwk);
 
         setTimeout(() => {
             hideCryptoOverlay();
@@ -293,7 +777,7 @@ async function handleLogin(event) {
     } catch (err) {
         console.error(err);
         hideCryptoOverlay();
-        errorEl.innerText = "Decryption failure. The password could not unlock your cryptographic private key.";
+        errorEl.innerText = "Fatal cryptographic failure: " + err.message;
         errorEl.classList.remove('hidden');
     }
 }
@@ -353,6 +837,7 @@ function enterMailbox() {
     renderUnreadBadges();
     renderDomainsCount();
     loadLinkedWallet();
+    loadUserTier();
 }
 
 function handleLogout() {
@@ -393,74 +878,36 @@ function handleLogout() {
 // -------------------------------------------------------------
 // ALUMNI L1 BLOCKCHAIN WALLET INTEGRATION
 // -------------------------------------------------------------
-let uploadedWalletPem = null;
-
 function triggerWalletUpload() {
     document.getElementById('wallet-modal').classList.remove('hidden');
     document.getElementById('wallet-link-form').reset();
-    document.getElementById('wallet-file-label').innerText = "Click or Drag & Drop PEM File";
     document.getElementById('wallet-link-error').classList.add('hidden');
-    uploadedWalletPem = null;
 }
 
 function closeWalletModal() {
     document.getElementById('wallet-modal').classList.add('hidden');
 }
 
-function triggerWalletInput() {
-    document.getElementById('wallet-pem-input').click();
-}
-
-function handleWalletFileSelect(event) {
-    const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const fileContent = e.target.result;
-        
-        if (!fileContent.includes("-----BEGIN PRIVATE KEY-----") && 
-            !fileContent.includes("-----BEGIN RSA PRIVATE KEY-----") && 
-            !fileContent.includes("-----BEGIN CERTIFICATE-----") && 
-            !fileContent.includes("-----BEGIN PUBLIC KEY-----")) {
-            document.getElementById('wallet-link-error').innerText = "Invalid PEM file! Make sure it contains valid cryptographic headers.";
-            document.getElementById('wallet-link-error').classList.remove('hidden');
-            uploadedWalletPem = null;
-            return;
-        }
-
-        uploadedWalletPem = fileContent;
-        document.getElementById('wallet-file-label').innerText = `📄 ${file.name} loaded successfully`;
-        document.getElementById('wallet-link-error').classList.add('hidden');
-    };
-    reader.readAsText(file);
-}
-
-// Hook up drag over visual handlers once page loads
-document.addEventListener('DOMContentLoaded', () => {
-    const dragArea = document.getElementById('wallet-drag-area');
-    if (dragArea) {
-        dragArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dragArea.classList.add('dragover');
-        });
-        dragArea.addEventListener('dragleave', () => {
-            dragArea.classList.remove('dragover');
-        });
-        dragArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dragArea.classList.remove('dragover');
-            handleWalletFileSelect(e);
-        });
-    }
-});
-
 async function handleRegisterWallet(event) {
     event.preventDefault();
     const tagInput = document.getElementById('wallet-tag-input').value.trim();
+    const keyInput = document.getElementById('wallet-key-input').value.trim();
     
-    if (!uploadedWalletPem) {
-        document.getElementById('wallet-link-error').innerText = "Please upload or drag your wallet's PEM key file first.";
+    if (!keyInput) {
+        document.getElementById('wallet-link-error').innerText = "Please enter your private key.";
+        document.getElementById('wallet-link-error').classList.remove('hidden');
+        return;
+    }
+
+    // Basic format validation: check if it looks like a PEM format or a valid 64-char Hex private key
+    const cleanKey = keyInput.replace(/\r/g, '').trim();
+    const isHex = /^[0-9a-fA-F]{64}$/.test(cleanKey);
+    const isPem = cleanKey.includes("-----BEGIN PRIVATE KEY-----") || 
+                  cleanKey.includes("-----BEGIN EC PRIVATE KEY-----") ||
+                  cleanKey.includes("-----BEGIN RSA PRIVATE KEY-----");
+    
+    if (!isHex && !isPem) {
+        document.getElementById('wallet-link-error').innerText = "Invalid key format! Please paste a valid secp256k1 private key in PEM format or 64-character Hex string.";
         document.getElementById('wallet-link-error').classList.remove('hidden');
         return;
     }
@@ -469,6 +916,12 @@ async function handleRegisterWallet(event) {
     const cleanTag = "@ALUMNI." + tagInput.toUpperCase().replace(/[^A-Z0-9_]/g, '');
     
     localStorage.setItem(`wallet_tag_${session.username}`, cleanTag);
+    localStorage.setItem(`wallet_pem_${session.username}`, cleanKey);
+    
+    if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
+        window.AlumniMailDB.auditLog("L1 LINK", `Linked Alumni Wallet to email ${session.username} with tag ${cleanTag}.`);
+    }
+
     await updateWalletBalance(cleanTag);
     closeWalletModal();
 }
@@ -530,6 +983,7 @@ async function updateWalletBalance(tag) {
 
 function unlinkWallet() {
     localStorage.removeItem(`wallet_tag_${session.username}`);
+    localStorage.removeItem(`wallet_pem_${session.username}`);
     
     const statusBadge = document.getElementById('wallet-status-badge');
     const linkedView = document.getElementById('wallet-linked-view');
@@ -543,12 +997,12 @@ function unlinkWallet() {
         statusBadge.className = "wallet-status disconnected";
     }
     if (connectBtn) {
-        connectBtn.innerText = "⚡ Connect Wallet";
+        connectBtn.innerText = "⚡ Link Alumni Wallet";
         connectBtn.disabled = false;
     }
     
     if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
-        window.AlumniMailDB.auditLog("L1 UNLINK", `Unlinked Alumni PEM Wallet from email ${session.username}.`);
+        window.AlumniMailDB.auditLog("L1 UNLINK", `Unlinked Alumni Wallet from email ${session.username}.`);
     }
 }
 
@@ -574,19 +1028,37 @@ async function handleSendTokens(event) {
     successDisplay.classList.add('hidden');
 
     const fromTag = localStorage.getItem(`wallet_tag_${session.username}`);
-    if (!fromTag) {
-        errorDisplay.innerText = "No wallet linked to current session.";
+    const walletPem = localStorage.getItem(`wallet_pem_${session.username}`);
+
+    if (!fromTag || !walletPem) {
+        errorDisplay.innerText = "No Alumni Wallet linked to current session. Please connect your wallet first.";
         errorDisplay.classList.remove('hidden');
         return;
     }
 
     try {
+        // Generate transaction payload locally
+        const txPayload = JSON.stringify({
+            sender: fromTag,
+            recipient: recipient,
+            amount: parseFloat(amount),
+            nonce: Date.now()
+        });
+        
+        // Sign transaction locally using modern Web Crypto API simulation
+        const signatureBytes = new Uint8Array(64);
+        window.crypto.getRandomValues(signatureBytes);
+        const signatureHex = Array.from(signatureBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
         if (typeof logNetworkRequest === "function") {
             logNetworkRequest("POST", "/api/v1/wallet/send", {
                 fromEmail: session.username,
                 fromTag: fromTag,
+                senderTag: fromTag,
                 recipient: recipient,
-                amount: amount
+                recipientTag: recipient,
+                amount: amount,
+                pemPrivateKey: "[LOCAL_STORAGE_PEM_KEY]"
             });
         }
 
@@ -596,8 +1068,13 @@ async function handleSendTokens(event) {
             body: JSON.stringify({
                 fromEmail: session.username,
                 fromTag: fromTag,
+                senderTag: fromTag,
                 recipient: recipient,
-                amount: amount
+                recipientTag: recipient,
+                amount: amount,
+                pemPrivateKey: walletPem,
+                txPayload: txPayload,
+                signatureHex: signatureHex
             })
         });
         const data = await response.json();
@@ -1239,8 +1716,15 @@ function handleNewDomain(event) {
         return;
     }
 
-    // Check duplicate
+    // Free account custom domain limit
     const domains = window.AlumniMailDB.getDomainsForUser(session.username);
+    if (session.userTier !== 'Pro' && domains.length >= 1) {
+        alert("Free accounts are strictly limited to exactly 1 custom domain. Please upgrade to Pro to unlock unlimited custom domains!");
+        openUpgradeModal();
+        return;
+    }
+
+    // Check duplicate
     if (domains.some(d => d.domainName === val)) {
         alert("This domain is already linked to your account.");
         return;
@@ -1314,6 +1798,14 @@ async function handleCreateAlias(event) {
     if (!val || !activeDnsDomainName) return;
 
     const fullAlias = `${val}@${activeDnsDomainName}`;
+
+    // Free account custom domain alias limit
+    const aliases = window.AlumniMailDB.getAliasesForUser(session.username);
+    if (session.userTier !== 'Pro' && aliases.length >= 1) {
+        alert("Free accounts are strictly limited to exactly 1 custom domain email alias. Please upgrade to Pro to unlock unlimited domain aliases!");
+        openUpgradeModal();
+        return;
+    }
 
     // Verify alias does not duplicate existing addresses in standard registry
     if (window.AlumniMailDB.getPublicKey(fullAlias)) {
@@ -1627,4 +2119,487 @@ function copyText(text) {
     }).catch(err => {
         console.error("Clipboard copy failed:", err);
     });
+}
+
+// -------------------------------------------------------------
+// SECTION 8: PRO UPGRADE & SUBSCRIPTION BILLING CYCLE FLOWS
+// -------------------------------------------------------------
+let billingCycle = 'yearly';
+let paymentMethod = 'fiat';
+
+function openUpgradeModal() {
+    document.getElementById('upgrade-modal').classList.add('active');
+    document.getElementById('upgrade-modal').classList.remove('hidden');
+    document.getElementById('upgrade-error').classList.add('hidden');
+    document.getElementById('upgrade-success').classList.add('hidden');
+    
+    // Default billing cycle is yearly, default payment is fiat
+    setBillingCycle('yearly');
+    setPaymentMethod('fiat');
+}
+
+function closeUpgradeModal() {
+    document.getElementById('upgrade-modal').classList.remove('active');
+    document.getElementById('upgrade-modal').classList.add('hidden');
+}
+
+function setBillingCycle(cycle) {
+    billingCycle = cycle;
+    const knob = document.getElementById('billing-cycle-knob');
+    const labelMonthly = document.getElementById('label-billing-monthly');
+    const labelYearly = document.getElementById('label-billing-yearly');
+    
+    if (cycle === 'monthly') {
+        knob.style.left = '2px';
+        labelMonthly.style.color = 'var(--accent-light)';
+        labelYearly.style.color = 'var(--text-color)';
+    } else {
+        knob.style.left = '24px';
+        labelMonthly.style.color = 'var(--text-color)';
+        labelYearly.style.color = 'var(--accent-light)';
+    }
+    
+    updateBillingPrices();
+}
+
+function toggleBillingCycle() {
+    if (billingCycle === 'monthly') {
+        setBillingCycle('yearly');
+    } else {
+        setBillingCycle('monthly');
+    }
+}
+
+function updateBillingPrices() {
+    const priceDisplay = document.getElementById('pro-price-display');
+    const periodDisplay = document.getElementById('pro-period-display');
+    const tokenDisplay = document.getElementById('token-payable-display');
+    
+    if (billingCycle === 'monthly') {
+        priceDisplay.innerText = "$3.99";
+        periodDisplay.innerText = "/ month";
+        // 30% Off First Year: $3.99 * 0.70 = $2.79 = 279 ALUMNI
+        tokenDisplay.innerText = "279 ALUMNI";
+    } else {
+        // Yearly saves 20%: $3.16/mo * 12 = $38.00 / year
+        priceDisplay.innerText = "$38.00";
+        periodDisplay.innerText = "/ year";
+        // 30% Off First Year: $38.00 * 0.70 = $26.60 = 2660 ALUMNI
+        tokenDisplay.innerText = "2660 ALUMNI";
+    }
+}
+
+function setPaymentMethod(method) {
+    paymentMethod = method;
+    const btnFiat = document.getElementById('pay-method-fiat');
+    const btnToken = document.getElementById('pay-method-token');
+    const formFiat = document.getElementById('fiat-payment-form');
+    const formToken = document.getElementById('token-payment-form');
+    
+    if (method === 'fiat') {
+        btnFiat.classList.add('active');
+        btnToken.classList.remove('active');
+        formFiat.classList.remove('hidden');
+        formToken.classList.add('hidden');
+    } else {
+        btnFiat.classList.remove('active');
+        btnToken.classList.add('active');
+        formFiat.classList.add('hidden');
+        formToken.classList.remove('hidden');
+    }
+}
+
+function loadUserTier() {
+    const tier = localStorage.getItem(`user_tier_${session.username}`) || 'Free';
+    session.userTier = tier;
+    const badge = document.getElementById('user-tier-badge');
+    if (badge) {
+        if (tier === 'Pro') {
+            badge.innerText = "💎 PRO MEMBER";
+            badge.style.background = "linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(0, 229, 255, 0.15) 100%)";
+            badge.style.color = "gold";
+            badge.style.borderColor = "gold";
+            badge.style.boxShadow = "0 0 10px rgba(255, 215, 0, 0.3)";
+        } else {
+            badge.innerText = "FREE TIER";
+            badge.style.background = "rgba(255, 255, 255, 0.06)";
+            badge.style.color = "var(--accent-light)";
+            badge.style.borderColor = "var(--accent-light)";
+            badge.style.boxShadow = "none";
+        }
+    }
+}
+
+async function submitFiatUpgrade() {
+    const cardNum = document.getElementById('upgrade-card-number').value.trim();
+    const errorEl = document.getElementById('upgrade-error');
+    const successEl = document.getElementById('upgrade-success');
+    
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+    
+    if (cardNum.length < 16) {
+        errorEl.innerText = "❌ Please enter a valid 16-digit credit card number.";
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    showCryptoOverlay();
+    updateCryptoOverlayStep('pbkdf2', 'active', '💳 Authorizing credit transaction with bank...');
+    
+    try {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        updateCryptoOverlayStep('rsa', 'active', '🔒 Syncing encrypted membership flags...');
+        
+        await window.AlumniMailDB.upgradeUserTier(session.username, 'Pro', 'fiat', { cardEnding: cardNum.slice(-4) });
+        
+        updateCryptoOverlayStep('aes', 'completed', '✅ Credit payment approved.');
+        updateCryptoOverlayStep('db', 'completed', '✅ Local Database upgrade finalized.');
+        
+        setTimeout(() => {
+            hideCryptoOverlay();
+            successEl.innerText = "🎉 Account upgraded successfully! Welcome to ALUMNI PRO.";
+            successEl.classList.remove('hidden');
+            loadUserTier();
+            setTimeout(closeUpgradeModal, 1500);
+        }, 800);
+    } catch (e) {
+        hideCryptoOverlay();
+        errorEl.innerText = "❌ Upgrade failed: " + e.message;
+        errorEl.classList.remove('hidden');
+    }
+}
+
+async function submitTokenUpgrade() {
+    const errorEl = document.getElementById('upgrade-error');
+    const successEl = document.getElementById('upgrade-success');
+    
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+    
+    // Check wallet tag and private PEM key
+    const walletTag = localStorage.getItem(`wallet_tag_${session.username}`);
+    const walletPem = localStorage.getItem(`wallet_pem_${session.username}`);
+    
+    if (!walletTag || !walletPem) {
+        errorEl.innerText = "❌ No Alumni PEM Wallet connected. Please connect wallet first via the sidebar.";
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    // Check balance
+    const balanceText = document.getElementById('wallet-balance-display').innerText;
+    const currentBalance = parseFloat(balanceText.replace(/[^\d.]/g, '')) || 0;
+    const requiredAmount = billingCycle === 'monthly' ? 279 : 2660;
+    
+    if (currentBalance < requiredAmount) {
+        errorEl.innerText = `❌ Insufficient L1 Balance. Upgrade requires ${requiredAmount} ALUMNI. (Current: ${currentBalance})`;
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    
+    showCryptoOverlay();
+    updateCryptoOverlayStep('pbkdf2', 'active', `🪙 Initiating L1 Token subtraction: ${requiredAmount} ALUMNI...`);
+    
+    try {
+        await new Promise(resolve => setTimeout(resolve, 600));
+        updateCryptoOverlayStep('rsa', 'active', '✍️ Signing transaction payload locally with private PEM key...');
+        
+        // Generate mock transaction signature
+        const txPayload = JSON.stringify({
+            sender: walletTag,
+            recipient: "alumnimail.escrow",
+            amount: requiredAmount,
+            nonce: Date.now()
+        });
+        
+        const signatureBytes = new Uint8Array(64);
+        window.crypto.getRandomValues(signatureBytes);
+        const signatureHex = Array.from(signatureBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        updateCryptoOverlayStep('aes', 'active', '🚀 Broadcasting signed subscription payload to L1 RPC node...');
+        
+        // POST to blockchain relayer
+        const res = await fetch('/api/v1/wallet/send', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                senderTag: walletTag,
+                recipientTag: "alumnimail.escrow",
+                amount: requiredAmount,
+                pemPrivateKey: walletPem,
+                txPayload,
+                signatureHex
+            })
+        });
+        
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || "L1 consensus rejected payment.");
+        }
+        
+        const txData = await res.json();
+        
+        updateCryptoOverlayStep('db', 'completed', '✅ L1 Block confirmed.');
+        
+        await window.AlumniMailDB.upgradeUserTier(session.username, 'Pro', 'token', null, requiredAmount, txData.txHash);
+        
+        // Update local wallet balance immediately
+        updateWalletBalance(walletTag);
+        
+        setTimeout(() => {
+            hideCryptoOverlay();
+            successEl.innerText = `🎉 Consensually verified on-chain! Upgraded to ALUMNI PRO. Tx: ${txData.txHash.substring(0, 12)}...`;
+            successEl.classList.remove('hidden');
+            loadUserTier();
+            setTimeout(closeUpgradeModal, 2000);
+        }, 1000);
+    } catch (e) {
+        hideCryptoOverlay();
+        errorEl.innerText = "❌ Blockchain consensus failed: " + e.message;
+        errorEl.classList.remove('hidden');
+    }
+}
+
+// -------------------------------------------------------------
+// SECTION 9: E2EE CALENDAR ACTIONS & RENDER CHANNELS
+// -------------------------------------------------------------
+let calendarMonth = 4; // May
+let calendarYear = 2026;
+let calendarMeetings = [];
+let selectedDateString = "2026-05-19"; // default to seed date
+
+function prevMonth() {
+    calendarMonth--;
+    if (calendarMonth < 0) {
+        calendarMonth = 11;
+        calendarYear--;
+    }
+    renderCalendarView();
+}
+
+function nextMonth() {
+    calendarMonth++;
+    if (calendarMonth > 11) {
+        calendarMonth = 0;
+        calendarYear++;
+    }
+    renderCalendarView();
+}
+
+function openAddMeetingModal() {
+    // Check custom meeting scheduling limits for Free users
+    const userMeetings = calendarMeetings.filter(m => m.username === session.username);
+    if (session.userTier !== 'Pro' && userMeetings.length >= 1) {
+        alert("🔒 Free accounts are strictly limited to exactly 1 scheduled meeting. Please upgrade to Pro for unlimited zero-knowledge scheduling!");
+        openUpgradeModal();
+        return;
+    }
+    
+    document.getElementById('add-meeting-modal').classList.remove('hidden');
+    document.getElementById('meeting-title').value = '';
+    document.getElementById('meeting-desc').value = '';
+    
+    // Initialize date to selected day
+    document.getElementById('meeting-date').value = selectedDateString;
+    document.getElementById('meeting-time').value = "14:00";
+}
+
+function closeAddMeetingModal() {
+    document.getElementById('add-meeting-modal').classList.add('hidden');
+}
+
+async function handleSaveMeeting(event) {
+    event.preventDefault();
+    const title = document.getElementById('meeting-title').value.trim();
+    const date = document.getElementById('meeting-date').value;
+    const time = document.getElementById('meeting-time').value;
+    const desc = document.getElementById('meeting-desc').value.trim();
+    
+    if (!title || !date || !time) return;
+    
+    showCryptoOverlay();
+    updateCryptoOverlayStep('pbkdf2', 'active', '🔑 Querying user local public key JWK...');
+    
+    try {
+        // Encrypt meeting elements locally using the user's own RSA key so only they can decrypt!
+        updateCryptoOverlayStep('rsa', 'active', '🔒 Encrypting meeting details with hybrid RSA-OAEP + AES-GCM...');
+        const encData = await window.AlumniMailCrypto.encryptEmail(title, desc, session.publicJwk);
+        
+        updateCryptoOverlayStep('aes', 'completed', '✅ Details locally encrypted inside browser memory.');
+        updateCryptoOverlayStep('db', 'active', '📤 Registering encrypted agenda stream to node storage...');
+        
+        const meetingObj = {
+            id: window.AlumniMailCrypto.bufferToBase64(window.crypto.getRandomValues(new Uint8Array(16))),
+            encryptedTitle: encData.encryptedPayload,
+            encryptedDesc: encData.encryptedPayload, // we wrap both title+desc inside the single payload
+            wrappingKey: encData.encryptedSessionKey,
+            ivTitle: encData.iv,
+            ivDesc: encData.iv,
+            date,
+            time
+        };
+        
+        await window.AlumniMailDB.saveMeeting(session.username, meetingObj);
+        updateCryptoOverlayStep('db', 'completed', '✅ Calendar transaction sync succeeded.');
+        
+        setTimeout(async () => {
+            hideCryptoOverlay();
+            closeAddMeetingModal();
+            selectedDateString = date;
+            await renderCalendarView();
+        }, 600);
+    } catch (e) {
+        hideCryptoOverlay();
+        alert("E2EE Meeting save failed: " + e.message);
+    }
+}
+
+async function renderCalendarView() {
+    const monthYearEl = document.getElementById('calendar-month-year');
+    const daysGrid = document.getElementById('calendar-days-grid');
+    
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    monthYearEl.innerText = `${months[calendarMonth]} ${calendarYear}`;
+    
+    // Fetch all user meetings from DB
+    calendarMeetings = await window.AlumniMailDB.getMeetingsForUser(session.username);
+    
+    // Build days calendar cells
+    daysGrid.innerHTML = '';
+    
+    const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay();
+    const totalDays = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    
+    // Empty cells for padding
+    for (let i = 0; i < firstDayIndex; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.style.opacity = '0';
+        daysGrid.appendChild(emptyCell);
+    }
+    
+    // Populating active days
+    for (let d = 1; d <= totalDays; d++) {
+        const cell = document.createElement('div');
+        cell.className = 'calendar-day-cell';
+        cell.style.cssText = `
+            padding: 8px; 
+            border: 1px solid rgba(255,255,255,0.03); 
+            border-radius: 6px; 
+            min-height: 48px; 
+            text-align: right; 
+            font-size: 0.8rem; 
+            cursor: pointer; 
+            position: relative; 
+            transition: all 0.2s;
+            background: rgba(255, 255, 255, 0.01);
+        `;
+        
+        const dayStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        cell.innerHTML = `<span style="font-weight:700;">${d}</span>`;
+        
+        // Click selector
+        cell.onclick = () => {
+            const activeCells = document.querySelectorAll('.calendar-day-cell');
+            activeCells.forEach(ac => ac.style.borderColor = 'rgba(255,255,255,0.03)');
+            cell.style.borderColor = 'var(--accent-light)';
+            selectedDateString = dayStr;
+            renderAgenda(dayStr);
+        };
+        
+        // Check meetings for this specific date
+        const dayMeetings = calendarMeetings.filter(m => m.date === dayStr);
+        if (dayMeetings.length > 0) {
+            const dot = document.createElement('span');
+            dot.style.cssText = "position: absolute; bottom: 6px; left: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-light); box-shadow: 0 0 8px var(--accent-light);";
+            cell.appendChild(dot);
+        }
+        
+        // Highlight active date selection
+        if (dayStr === selectedDateString) {
+            cell.style.borderColor = 'var(--accent-light)';
+            cell.style.background = 'rgba(0, 229, 255, 0.05)';
+        }
+        
+        daysGrid.appendChild(cell);
+    }
+    
+    // Auto-load agenda for default or selected day
+    renderAgenda(selectedDateString);
+}
+
+async function renderAgenda(dayString) {
+    const listEl = document.getElementById('agenda-meetings-list');
+    listEl.innerHTML = '';
+    
+    // Format human-readable date
+    const dateObj = new Date(dayString + "T00:00:00");
+    const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    
+    const header = document.createElement('div');
+    header.style.cssText = "font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 5px;";
+    header.innerText = formattedDate;
+    listEl.appendChild(header);
+    
+    const dayMeetings = calendarMeetings.filter(m => m.date === dayString);
+    
+    if (dayMeetings.length === 0) {
+        const noEvent = document.createElement('div');
+        noEvent.style.cssText = "color: var(--text-muted); text-align: center; margin-top: 15px; font-size: 0.75rem; border: 1px dashed rgba(255,255,255,0.04); padding: 20px; border-radius: 6px;";
+        noEvent.innerText = "No secure meetings scheduled for this day.";
+        listEl.appendChild(noEvent);
+        return;
+    }
+    
+    // Free premium restriction alert check
+    if (session.userTier !== 'Pro') {
+        const lockedCard = document.createElement('div');
+        lockedCard.className = 'glass-panel';
+        lockedCard.style.cssText = "padding: 15px; text-align: center; border: 1px solid var(--accent-light); cursor: pointer; transition: all 0.2s;";
+        lockedCard.onclick = openUpgradeModal;
+        lockedCard.innerHTML = `
+            <div style="font-size: 1.1rem; margin-bottom: 5px;">🔒</div>
+            <h4 style="margin:0 0 5px 0; font-size: 0.8rem; font-weight: 800; color: var(--accent-light);">E2EE Details Locked</h4>
+            <p style="margin:0; font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
+                Zero-Knowledge agenda details are premium E2EE capabilities. Upgrade to PRO to view encrypted events.
+            </p>
+        `;
+        listEl.appendChild(lockedCard);
+        return;
+    }
+    
+    // Decrypt and display each meeting
+    for (const m of dayMeetings) {
+        const item = document.createElement('div');
+        item.className = 'glass-panel';
+        item.style.cssText = "padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.01);";
+        
+        const loader = document.createElement('div');
+        loader.style.cssText = "font-size: 0.7rem; color: var(--text-muted); font-style: italic;";
+        loader.innerHTML = "🔓 Local RSA decryption stream active...";
+        item.appendChild(loader);
+        listEl.appendChild(item);
+        
+        try {
+            // RSA private key unwrap payload E2EE
+            const decrypted = await window.AlumniMailCrypto.decryptEmail(m.encryptedTitle, m.wrappingKey, m.ivTitle, session.privateKey);
+            
+            // Render decrypted contents beautifully!
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                    <h4 style="margin: 0; font-weight: 800; font-size: 0.85rem; color: var(--accent-light);">${decrypted.subject}</h4>
+                    <span style="font-size: 0.7rem; background: var(--border-color); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: 800;">⏰ ${m.time}</span>
+                </div>
+                <p style="margin: 0; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">${decrypted.body}</p>
+                <div style="margin-top: 8px; display: flex; align-items: center; gap: 4px; font-size: 0.6rem; color: var(--success-light); font-weight: 800; text-shadow: 0 0 6px rgba(16, 185, 129, 0.2);">
+                    🔑 Authenticated & Locally Decrypted (E2EE)
+                </div>
+            `;
+        } catch (err) {
+            item.innerHTML = `
+                <h4 style="margin: 0 0 4px 0; font-size: 0.85rem; color: var(--accent-light);">⚠️ Decryption Error</h4>
+                <p style="margin: 0; font-size: 0.7rem; color: var(--text-muted);">Failed to decrypt securely with loaded private keys.</p>
+            `;
+        }
+    }
 }

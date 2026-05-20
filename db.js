@@ -5,6 +5,15 @@
  * and implements query tracer long-polling.
  */
 
+function getNormUsername(username) {
+    if (!username) return "";
+    let clean = username.trim();
+    if (!clean.includes('@')) {
+        clean = `${clean}@alumnimail.app`;
+    }
+    return clean.toLowerCase();
+}
+
 class MockDatabase {
     constructor() {
         this.listeners = [];
@@ -99,13 +108,13 @@ class MockDatabase {
         // Since app.js does synchronous checks, we fetch from local storage backup
         // or return a mock record until resolved. To ensure login works perfectly,
         // we can dynamically sync the user record to LocalStorage during registration/login.
-        const norm = username.toLowerCase().trim();
+        const norm = getNormUsername(username);
         const localUsers = JSON.parse(localStorage.getItem('alumni_mail_users') || '{}');
         return localUsers[norm] || null;
     }
 
     async registerUser(username, authHash, salt, publicJwk, encPrivateKey) {
-        const norm = username.toLowerCase().trim();
+        const norm = getNormUsername(username);
         
         // Sync local storage copy for synchronous checks in app.js
         const localUsers = JSON.parse(localStorage.getItem('alumni_mail_users') || '{}');
@@ -130,7 +139,7 @@ class MockDatabase {
 
     // Helper to cache login state locally
     saveLoggedInUserCache(username, salt, publicJwk, encPrivateKey) {
-        const norm = username.toLowerCase().trim();
+        const norm = getNormUsername(username);
         const localUsers = JSON.parse(localStorage.getItem('alumni_mail_users') || '{}');
         localUsers[norm] = { username: norm, authHash: "", salt, publicJwk, encPrivateKey };
         localStorage.setItem('alumni_mail_users', JSON.stringify(localUsers));
@@ -141,12 +150,12 @@ class MockDatabase {
     // -------------------------------------------------------------
     getDomainsForUser(username) {
         const localDom = JSON.parse(localStorage.getItem('alumni_mail_domains') || '[]');
-        return localDom.filter(d => d.owner === username.toLowerCase().trim());
+        return localDom.filter(d => d.owner === getNormUsername(username));
     }
 
     async addDomain(domainName, owner) {
         const normDom = domainName.toLowerCase().trim();
-        const normOwner = owner.toLowerCase().trim();
+        const normOwner = getNormUsername(owner);
 
         // Optimistically update local cache
         const localDom = JSON.parse(localStorage.getItem('alumni_mail_domains') || '[]');
@@ -210,14 +219,14 @@ class MockDatabase {
     // ALIAS REGISTRY
     // -------------------------------------------------------------
     getAliasesForUser(username) {
-        const norm = username.toLowerCase().trim();
+        const norm = getNormUsername(username);
         const localAliases = JSON.parse(localStorage.getItem('alumni_mail_aliases') || '[]');
-        return localAliases.filter(a => a.owner === norm);
+        return localAliases.filter(a => getNormUsername(a.owner) === norm);
     }
 
     async createAlias(email, owner, publicJwk, encPrivateKey) {
         const normEmail = email.toLowerCase().trim();
-        const normOwner = owner.toLowerCase().trim();
+        const normOwner = getNormUsername(owner);
 
         // Local cache write
         const localAliases = JSON.parse(localStorage.getItem('alumni_mail_aliases') || '[]');
@@ -242,7 +251,7 @@ class MockDatabase {
         // During composition, this checks if a recipient has an active encryption key.
         // We do a local sync on boot, and dynamically resolve external addresses.
         // If not found in LocalStorage, we fall back to querying the cached list.
-        const norm = username.toLowerCase().trim();
+        const norm = getNormUsername(username);
         
         // Check primary users
         const localUsers = JSON.parse(localStorage.getItem('alumni_mail_users') || '{}');
@@ -250,7 +259,7 @@ class MockDatabase {
 
         // Check custom aliases
         const localAliases = JSON.parse(localStorage.getItem('alumni_mail_aliases') || '[]');
-        const alias = localAliases.find(a => a.email === norm);
+        const alias = localAliases.find(a => getNormUsername(a.email) === norm);
         if (alias) return alias.publicJwk;
 
         // Dynamic E2EE Recipient discovery: Hal is seeded by default
@@ -272,9 +281,9 @@ class MockDatabase {
     // ENCRYPTED EMAIL SERVICES
     // -------------------------------------------------------------
     getEmailsForUser(username) {
-        const norm = username.toLowerCase().trim();
+        const norm = getNormUsername(username);
         const localEmails = JSON.parse(localStorage.getItem('alumni_mail_emails') || '[]');
-        return localEmails.filter(e => e.sender === norm || e.recipient === norm);
+        return localEmails.filter(e => getNormUsername(e.sender) === norm || getNormUsername(e.recipient) === norm);
     }
 
     async sendEmail(email) {
@@ -341,6 +350,104 @@ class MockDatabase {
     }
 
     // -------------------------------------------------------------
+    // E2EE CALENDAR DATA INTERFACES
+    // -------------------------------------------------------------
+    async getMeetingsForUser(username) {
+        const norm = getNormUsername(username);
+        try {
+            const res = await fetch(`${this.apiBase}/api/v1/calendar/${norm}`);
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem(`alumni_meetings_${norm}`, JSON.stringify(data.meetings || []));
+                return data.meetings || [];
+            }
+        } catch (e) {
+            console.error("Failed to fetch meetings from server:", e);
+        }
+        return JSON.parse(localStorage.getItem(`alumni_meetings_${norm}`) || '[]');
+    }
+
+    async saveMeeting(username, meeting) {
+        const norm = getNormUsername(username);
+        const localMeetings = JSON.parse(localStorage.getItem(`alumni_meetings_${norm}`) || '[]');
+        localMeetings.push(meeting);
+        localStorage.setItem(`alumni_meetings_${norm}`, JSON.stringify(localMeetings));
+
+        try {
+            await fetch(`${this.apiBase}/api/v1/calendar/add`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: norm, meeting })
+            });
+            this.emit();
+        } catch (e) {
+            console.error("Failed to sync meeting to server:", e);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // BILLING & SUBSCRIPTIONS
+    // -------------------------------------------------------------
+    async upgradeUserTier(username, tier, paymentMethod, cardDetails, alumniAmount, txHash) {
+        const norm = getNormUsername(username);
+        try {
+            const res = await fetch(`${this.apiBase}/api/v1/subscription/upgrade`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: norm, tier, paymentMethod, cardDetails, alumniAmount, txHash })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem(`user_tier_${norm}`, 'Pro');
+                this.emit();
+                return data;
+            } else {
+                const err = await res.json();
+                throw new Error(err.error || "Upgrade transaction rejected.");
+            }
+        } catch (e) {
+            console.error("Failed to post upgrade request:", e);
+            throw e;
+        }
+    }
+
+    // -------------------------------------------------------------
+    // USER DATA SYNCHRONIZATION
+    // -------------------------------------------------------------
+    async syncUserData(username) {
+        const norm = getNormUsername(username);
+        this.apiBase = window.location.origin;
+
+        try {
+            // 1. Fetch emails
+            const mailRes = await fetch(`${this.apiBase}/api/mail/recipient/${encodeURIComponent(norm)}`);
+            if (mailRes.ok) {
+                const mailData = await mailRes.json();
+                localStorage.setItem('alumni_mail_emails', JSON.stringify(mailData.emails || []));
+            }
+
+            // 2. Fetch custom domains
+            const domRes = await fetch(`${this.apiBase}/api/domains/${encodeURIComponent(norm)}`);
+            if (domRes.ok) {
+                const domData = await domRes.json();
+                localStorage.setItem('alumni_mail_domains', JSON.stringify(domData.domains || []));
+            }
+
+            // 3. Fetch aliases
+            const aliasRes = await fetch(`${this.apiBase}/api/aliases/${encodeURIComponent(norm)}`);
+            if (aliasRes.ok) {
+                const aliasData = await aliasRes.json();
+                localStorage.setItem('alumni_mail_aliases', JSON.stringify(aliasData.aliases || []));
+            }
+
+            this.emit();
+            this.auditLog("SYNC", `Synchronized emails, domains, and aliases from server for ${norm}`);
+        } catch (e) {
+            console.error("Failed to sync user data from server:", e.message);
+        }
+    }
+
+    // -------------------------------------------------------------
     // SYSTEM RESET
     // -------------------------------------------------------------
     async nukeDatabase() {
@@ -348,6 +455,15 @@ class MockDatabase {
         localStorage.removeItem('alumni_mail_emails');
         localStorage.removeItem('alumni_mail_domains');
         localStorage.removeItem('alumni_mail_aliases');
+        
+        // Dynamic clean
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('alumni_meetings_') || key.startsWith('user_tier_') || key.startsWith('biometric_'))) {
+                localStorage.removeItem(key);
+                i--;
+            }
+        }
         
         try {
             await fetch(`${this.apiBase}/api/logs/nuke`, { method: "POST" });

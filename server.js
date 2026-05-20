@@ -17,6 +17,15 @@ const PORT = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
+// Force no-cache on all /api/* routes — prevents Cloudflare from serving stale HTML
+// instead of live JSON responses for GET endpoints (critical for auth flows on mobile)
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Surrogate-Control', 'no-store');
+    next();
+});
+
 // Serve Static Frontend Assets from root folder
 app.use(express.static(path.join(__dirname)));
 
@@ -32,16 +41,19 @@ function loadDB() {
             emails: [],
             domains: [],
             aliases: [],
+            meetings: [],
             logs: []
         };
         fs.writeFileSync(DB_PATH, JSON.stringify(seedData, null, 4));
         return seedData;
     }
     try {
-        return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+        const data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+        if (!data.meetings) data.meetings = [];
+        return data;
     } catch (e) {
         console.error("Corrupted database. Resetting to blank schema.");
-        const resetData = { users: {}, emails: [], domains: [], aliases: [], logs: [] };
+        const resetData = { users: {}, emails: [], domains: [], aliases: [], meetings: [], logs: [] };
         fs.writeFileSync(DB_PATH, JSON.stringify(resetData, null, 4));
         return resetData;
     }
@@ -49,6 +61,16 @@ function loadDB() {
 
 function saveDB(data) {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 4));
+}
+
+// Helper: Normalize bare username to full address
+function getNormUsername(username) {
+    if (!username) return "";
+    let clean = username.trim();
+    if (!clean.includes('@')) {
+        clean = `${clean}@alumnimail.app`;
+    }
+    return clean.toLowerCase();
 }
 
 // Helper: SQL Query Logger to mimic SQLite queries in auditor terminal
@@ -112,11 +134,14 @@ async function initSMTPTransporter() {
 // -------------------------------------------------------------
 // AUTHENTICATION ROUTES (Zero-Knowledge)
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// AUTHENTICATION ROUTES (Zero-Knowledge)
+// -------------------------------------------------------------
 app.post('/api/auth/register', (req, res) => {
     const { username, authHash, salt, publicJwk, encPrivateKey } = req.body;
     const db = loadDB();
 
-    const normUser = username.toLowerCase().trim();
+    const normUser = getNormUsername(username);
 
     if (db.users[normUser]) {
         return res.status(400).json({ error: "Address already registered." });
@@ -128,24 +153,41 @@ app.post('/api/auth/register', (req, res) => {
         salt,
         publicJwk,
         encPrivateKey,
-        registeredAt: Date.now()
+        tier: 'Free',
+        registeredAt: Date.now(),
+        webauthnCredentials: []
     };
     saveDB(db);
 
     auditLog(
         "INSERT", 
-        `INSERT INTO users (username, auth_hash, salt, public_key, enc_private_key) VALUES ('${normUser}', '${authHash.substring(0, 15)}...', '${salt}', '{JWK}', '{CIPHER}');`,
+        `INSERT INTO users (username, auth_hash, salt, public_key, enc_private_key, tier) VALUES ('${normUser}', '${authHash.substring(0, 15)}...', '${salt}', '{JWK}', '{CIPHER}', 'Free');`,
         { success: true }
     );
 
     res.json({ success: true });
 });
 
+app.get('/api/auth/salt/:username', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const normUser = getNormUsername(req.params.username);
+    const db = loadDB();
+    const user = db.users[normUser];
+
+    if (!user) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    auditLog("SELECT", `SELECT salt FROM users WHERE username = '${normUser}';`, { username: normUser });
+    res.json({ salt: user.salt });
+});
+
 app.post('/api/auth/login', (req, res) => {
     const { username, authHash } = req.body;
     const db = loadDB();
 
-    const normUser = username.toLowerCase().trim();
+    const normUser = getNormUsername(username);
     const user = db.users[normUser];
 
     if (!user) {
@@ -158,7 +200,7 @@ app.post('/api/auth/login', (req, res) => {
 
     auditLog(
         "SELECT",
-        `SELECT salt, public_key, enc_private_key FROM users WHERE username = '${normUser}';`,
+        `SELECT salt, public_key, enc_private_key, tier FROM users WHERE username = '${normUser}';`,
         { username: normUser }
     );
 
@@ -166,11 +208,184 @@ app.post('/api/auth/login', (req, res) => {
         success: true,
         salt: user.salt,
         publicJwk: user.publicJwk,
-        encPrivateKey: user.encPrivateKey
+        encPrivateKey: user.encPrivateKey,
+        tier: user.tier || 'Free'
     });
 });
 
+// -------------------------------------------------------------
+// WEBAUTHN / BIOMETRIC AUTHENTICATION ROUTES
+// -------------------------------------------------------------
+
+// Helper to convert base64url to Buffer
+function base64urlToBuffer(str) {
+    let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    return Buffer.from(b64, 'base64');
+}
+
+app.get('/api/auth/webauthn/register-options', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const username = req.query.username;
+    if (!username) {
+        return res.status(400).json({ error: "Username is required." });
+    }
+    const normUser = getNormUsername(username);
+    const crypto = require('crypto');
+    const challenge = crypto.randomBytes(32).toString('base64url');
+
+    auditLog("WEBAUTHN", `Generated register options challenge for ${normUser}`);
+
+    res.json({
+        challenge,
+        rp: { id: req.hostname, name: "Alumni Mail" },
+        user: {
+            id: Buffer.from(normUser).toString('base64url'),
+            name: normUser,
+            displayName: normUser.split('@')[0]
+        },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256
+        authenticatorSelection: {
+            authenticatorAttachment: "platform", // Enforce native Face ID / Touch ID / Fingerprint
+            userVerification: "preferred"
+        }
+    });
+});
+
+app.post('/api/auth/webauthn/register', (req, res) => {
+    const { username, credentialId, publicKeySpki } = req.body;
+    if (!username || !credentialId || !publicKeySpki) {
+        return res.status(400).json({ error: "Missing required WebAuthn registration parameters." });
+    }
+    const normUser = getNormUsername(username);
+    const db = loadDB();
+    
+    if (!db.users[normUser]) {
+        return res.status(404).json({ error: "User not found." });
+    }
+
+    db.users[normUser].webauthnCredentials = db.users[normUser].webauthnCredentials || [];
+    
+    // Check if already registered
+    const exists = db.users[normUser].webauthnCredentials.some(c => c.credentialId === credentialId);
+    if (!exists) {
+        db.users[normUser].webauthnCredentials.push({ credentialId, publicKeySpki });
+        saveDB(db);
+    }
+
+    auditLog("INSERT", `Registered WebAuthn credential ID '${credentialId.substring(0, 15)}...' for ${normUser}`);
+    res.json({ success: true });
+});
+
+app.get('/api/auth/webauthn/login-options', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const username = req.query.username;
+    const crypto = require('crypto');
+    const challenge = crypto.randomBytes(32).toString('base64url');
+
+    const responseOptions = {
+        challenge,
+        rpId: req.hostname,
+        userVerification: "preferred"
+    };
+
+    if (username) {
+        const normUser = getNormUsername(username);
+        const db = loadDB();
+        const user = db.users[normUser];
+        if (user && user.webauthnCredentials) {
+            responseOptions.allowCredentials = user.webauthnCredentials.map(c => ({
+                id: c.credentialId,
+                type: "public-key"
+            }));
+        }
+        auditLog("WEBAUTHN", `Generated assertion options for identified user ${normUser}`);
+    } else {
+        auditLog("WEBAUTHN", `Generated discoverable assertion options challenge`);
+    }
+
+    res.json(responseOptions);
+});
+
+app.post('/api/auth/webauthn/login-verify', (req, res) => {
+    const { username, credentialId, clientDataJSON, authenticatorData, signature } = req.body;
+    if (!credentialId || !clientDataJSON || !authenticatorData || !signature) {
+        return res.status(400).json({ error: "Missing required WebAuthn assertion parameters." });
+    }
+
+    const db = loadDB();
+    let normUser = username ? getNormUsername(username) : null;
+    let foundUser = null;
+    let foundCred = null;
+
+    if (normUser && db.users[normUser]) {
+        foundUser = db.users[normUser];
+        foundCred = (foundUser.webauthnCredentials || []).find(c => c.credentialId === credentialId);
+    } else {
+        // Discoverable search! Search all users for matching credential ID
+        for (const u of Object.values(db.users)) {
+            const cred = (u.webauthnCredentials || []).find(c => c.credentialId === credentialId);
+            if (cred) {
+                foundUser = u;
+                foundCred = cred;
+                normUser = u.username;
+                break;
+            }
+        }
+    }
+
+    if (!foundUser || !foundCred) {
+        return res.status(404).json({ error: "Registered biometric credential not found." });
+    }
+
+    // Verify assertion signature using Node native crypto module
+    try {
+        const crypto = require('crypto');
+        
+        const clientDataBuffer = base64urlToBuffer(clientDataJSON);
+        const clientDataHash = crypto.createHash('sha256').update(clientDataBuffer).digest();
+        const authenticatorDataBuffer = base64urlToBuffer(authenticatorData);
+        const signatureBuffer = base64urlToBuffer(signature);
+        
+        const signedData = Buffer.concat([authenticatorDataBuffer, clientDataHash]);
+        const pubKeyBuffer = base64urlToBuffer(foundCred.publicKeySpki);
+        
+        const publicKey = crypto.createPublicKey({
+            key: pubKeyBuffer,
+            format: 'der',
+            type: 'spki'
+        });
+        
+        const verify = crypto.createVerify('SHA256');
+        verify.update(signedData);
+        const isVerified = verify.verify(publicKey, signatureBuffer);
+        
+        if (!isVerified) {
+            return res.status(401).json({ error: "Biometric signature verification failed." });
+        }
+
+        auditLog("SELECT", `Verified WebAuthn signature for user ${normUser} using credential ${credentialId.substring(0, 15)}...`);
+
+        res.json({
+            success: true,
+            username: normUser,
+            salt: foundUser.salt,
+            publicJwk: foundUser.publicJwk,
+            encPrivateKey: foundUser.encPrivateKey,
+            tier: foundUser.tier || 'Free'
+        });
+
+    } catch (err) {
+        console.error("WebAuthn verification crash:", err);
+        return res.status(500).json({ error: "Internal verification error: " + err.message });
+    }
+});
+
 app.get('/api/keys/:username', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
     const normUser = req.params.username.toLowerCase().trim();
     const db = loadDB();
 
@@ -196,6 +411,8 @@ app.get('/api/keys/:username', (req, res) => {
 // SECURE DOMAINS PORTAL WIZARD
 // -------------------------------------------------------------
 app.get('/api/domains/:username', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
     const normUser = req.params.username.toLowerCase().trim();
     const db = loadDB();
 
@@ -264,6 +481,8 @@ app.post('/api/domains/verify', (req, res) => {
 // CUSTOM ALIAS CONFIGURATIONS
 // -------------------------------------------------------------
 app.get('/api/aliases/:username', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
     const normUser = req.params.username.toLowerCase().trim();
     const db = loadDB();
 
@@ -302,6 +521,8 @@ app.post('/api/aliases/create', (req, res) => {
 // ENCRYPTED EMAIL DISPATCH & DELIVERY (SMTP RELAYS)
 // -------------------------------------------------------------
 app.get('/api/mail/recipient/:username', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
     const normUser = req.params.username.toLowerCase().trim();
     const db = loadDB();
 
@@ -558,7 +779,10 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
 });
 
 app.post('/api/v1/wallet/send', async (req, res) => {
-    const { fromEmail, fromTag, recipient, amount } = req.body;
+    const fromEmail = req.body.fromEmail;
+    const fromTag = req.body.fromTag || req.body.senderTag;
+    const recipient = req.body.recipient || req.body.recipientTag;
+    const amount = req.body.amount;
     
     if (!fromTag || !recipient || !amount) {
         return res.status(400).json({ error: "Missing required transaction parameters." });
@@ -619,13 +843,110 @@ app.post('/api/v1/wallet/send', async (req, res) => {
     });
 });
 
+// -------------------------------------------------------------
+// PREMIUM UPGRADE ENDPOINT (Dual-currency Credit Card / L1 Token)
+// -------------------------------------------------------------
+app.post('/api/v1/subscription/upgrade', (req, res) => {
+    const { username, tier, paymentMethod, cardDetails, alumniAmount, txHash } = req.body;
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+
+    if (!db.users[normUser]) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    // Set Premium tier
+    db.users[normUser].tier = tier;
+    db.users[normUser].paymentMethod = paymentMethod;
+    if (paymentMethod === 'token') {
+        db.users[normUser].subscriptionTxHash = txHash;
+        db.users[normUser].subscriptionAlumniAmount = alumniAmount;
+    }
+    saveDB(db);
+
+    // Dynamic Audit Log for SQL traces
+    auditLog(
+        "UPDATE",
+        `UPDATE users SET tier = 'Pro', payment_method = '${paymentMethod}' WHERE username = '${normUser}';`,
+        { username: normUser, tier, paymentMethod }
+    );
+
+    if (paymentMethod === 'token') {
+        auditLog(
+            "INSERT",
+            `INSERT INTO L1_ledger_transactions (sender, recipient, amount, payload) VALUES ('${normUser}', 'alumnimail.escrow', ${alumniAmount}, 'PRO_UPGRADE_ANNUAL');`,
+            { txHash }
+        );
+    }
+
+    res.json({
+        success: true,
+        tier: 'Pro',
+        message: `Account successfully upgraded to ALUMNI PRO via ${paymentMethod === 'token' ? 'L1 Token Transfer' : 'Credit Card Transaction'}.`
+    });
+});
+
+// -------------------------------------------------------------
+// E2EE ENCRYPTED CALENDAR ENDPOINTS
+// -------------------------------------------------------------
+app.get('/api/v1/calendar/:username', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    const db = loadDB();
+    const normUser = req.params.username.toLowerCase().trim();
+
+    const userMeetings = db.meetings.filter(m => m.username === normUser);
+
+    auditLog(
+        "SELECT",
+        `SELECT id, encrypted_payload, date, time FROM calendar_events WHERE username = '${normUser}';`,
+        { count: userMeetings.length }
+    );
+
+    res.json({ success: true, meetings: userMeetings });
+});
+
+app.post('/api/v1/calendar/add', (req, res) => {
+    const { username, meeting } = req.body;
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+
+    if (!db.users[normUser]) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+
+    db.meetings.push({
+        id: meeting.id,
+        username: normUser,
+        encryptedTitle: meeting.encryptedTitle,
+        encryptedDesc: meeting.encryptedDesc,
+        date: meeting.date,
+        time: meeting.time,
+        ivTitle: meeting.ivTitle,
+        ivDesc: meeting.ivDesc,
+        wrappingKey: meeting.wrappingKey
+    });
+
+    saveDB(db);
+
+    auditLog(
+        "INSERT",
+        `INSERT INTO calendar_events (id, username, encrypted_title, encrypted_desc, event_date, event_time, wrapping_key) VALUES ('${meeting.id}', '${normUser}', '${meeting.encryptedTitle.substring(0, 15)}...', '${meeting.encryptedDesc.substring(0, 15)}...', '${meeting.date}', '${meeting.time}', '${meeting.wrappingKey.substring(0, 10)}...');`,
+        { meetingId: meeting.id }
+    );
+
+    res.json({ success: true });
+});
+
 app.get('/api/logs', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
     const db = loadDB();
     res.json({ logs: db.logs });
 });
 
 app.post('/api/logs/nuke', (req, res) => {
-    const seedData = { users: {}, emails: [], domains: [], aliases: [], logs: [] };
+    const seedData = { users: {}, emails: [], domains: [], aliases: [], meetings: [], logs: [] };
     saveDB(seedData);
     console.log("[DB] Nuke command completed.");
     res.json({ success: true });
@@ -641,5 +962,7 @@ app.get('*', (req, res) => {
 // -------------------------------------------------------------
 app.listen(PORT, async () => {
     console.log(`\n🚀 [SERVER] Alumni Mail backend running live at http://localhost:${PORT}`);
+    console.log(`📱 [MOBILE ACCESS] To connect securely on a mobile phone for E2EE cryptography:`);
+    console.log(`   👉 Use a secure tunnel: run 'npx localtunnel --port ${PORT}' or use ngrok, then load the HTTPS URL on your phone.\n`);
     await initSMTPTransporter();
 });

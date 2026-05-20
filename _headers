@@ -1,0 +1,22 @@
+# Alumni Mail - Cloudflare Edge Cache Bypass Rules
+# Prevents Cloudflare from serving cached HTML for dynamic API GET routes.
+# Without this, Cloudflare intercepts GET /api/* and returns stale index.html
+# instead of the Express JSON response, breaking all authentication flows.
+
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate
+  Pragma: no-cache
+  X-Content-Type-Options: nosniff
+  Content-Type: application/json
+
+/api/auth/*
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate
+  Pragma: no-cache
+
+/api/mail/*
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate
+  Pragma: no-cache
+
+/api/v1/*
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate
+  Pragma: no-cache

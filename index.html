@@ -12,6 +12,25 @@
 </head>
 <body>
 
+    <!-- INSECURE CONTEXT WARNING BANNER -->
+    <div id="insecure-context-alert" class="hidden" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999; background: rgba(239, 68, 68, 0.15); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(239, 68, 68, 0.4); padding: 15px 25px; font-family: 'Inter', sans-serif; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); display: flex; justify-content: center;">
+        <div style="max-width: 800px; width: 100%; display: flex; gap: 15px; align-items: flex-start; color: #ff8a8a; font-size: 0.9rem; line-height: 1.5;">
+            <span style="font-size: 1.8rem; line-height: 1;">⚠️</span>
+            <div style="flex: 1;">
+                <h4 style="margin: 0 0 5px 0; color: #ff5252; font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em;">Insecure Mobile Context Detected</h4>
+                <p style="margin: 0 0 10px 0;">End-to-End Encryption (E2EE) and WebAuthn Biometrics are <strong>completely disabled</strong> by your browser because this site is loaded over insecure HTTP (non-localhost IP: <code><span id="insecure-ip-display"></span></code>).</p>
+                <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 6px; font-size: 0.85rem; color: #e2e8f0; margin-top: 10px;">
+                    <p style="margin: 0 0 8px 0; font-weight: 600; color: #60a5fa;">💡 How to log in on your phone:</p>
+                    <ol style="margin: 0; padding-left: 20px;">
+                        <li style="margin-bottom: 6px;"><strong>Use an HTTPS Tunnel (Recommended):</strong> Start a tunnel on your computer (e.g. run <code>npx localtunnel --port 8000</code> or <code>ngrok http 8000</code>) and open the secure <code>https://</code> link on your phone.</li>
+                        <li style="margin-bottom: 6px;"><strong>iOS Simulator:</strong> Use the local iOS Simulator on this computer and open <code>http://localhost:8000</code> or <code>http://127.0.0.1:8000</code>.</li>
+                        <li><strong>Developer Flags:</strong> In Safari or Chrome on your phone, you can configure your developer options to treat your computer's IP address as a Secure Context.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Background decorative grids -->
     <div class="bg-glow bg-glow-blue"></div>
     <div class="bg-glow bg-glow-emerald"></div>
@@ -54,9 +73,12 @@
                             <span class="input-icon">🔑</span>
                         </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn primary glow full-width">
+                    <div class="form-actions" style="display: flex; gap: 10px;">
+                        <button type="submit" class="btn primary glow" style="flex: 1;">
                             <span class="btn-text">Unlock Mailbox</span>
+                        </button>
+                        <button type="button" id="btn-biometric-login" class="btn secondary glass-panel" style="width: 50px; min-width: 50px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;" title="Unlock with Biometrics (Face ID / Fingerprint)" onclick="handleBiometricLogin()">
+                            <span>👤</span>
                         </button>
                     </div>
                     <div id="login-error" class="auth-error-msg hidden"></div>
@@ -122,17 +144,24 @@
 
                 <div class="session-user-info">
                     <div class="avatar">👤</div>
-                    <div class="user-details">
+                    <div class="user-details" style="flex: 1;">
                         <span id="active-user-display" class="username">satoshi@alumnimail.app</span>
-                        <span class="status-indicator-wrapper">
-                            <span class="status-dot green"></span>
-                            <span class="status-text">Client Secured</span>
-                        </span>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                            <span id="user-tier-badge" class="badge secondary" style="cursor: pointer; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--accent-light); border: 1px solid var(--accent-light);" onclick="openUpgradeModal()">FREE TIER</span>
+                            <span class="status-indicator-wrapper">
+                                <span class="status-dot green"></span>
+                                <span class="status-text">Client Secured</span>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
                 <!-- ALUMNI L1 BLOCKCHAIN WALLET WIDGET -->
-                <div class="wallet-widget" style="margin-top: 15px; padding: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px;">
+                <div class="wallet-widget">
+                    <div class="wallet-header">
+                        <span class="wallet-title">🔗 ALUMNI WALLET</span>
+                        <span id="wallet-status-badge" class="wallet-status disconnected">Disconnected</span>
+                    </div>
                     <div id="wallet-linked-view" class="wallet-body hidden">
                         <div class="wallet-tag-row" style="margin-bottom: 8px;">
                             <span class="wallet-label">Tag:</span>
@@ -150,9 +179,13 @@
                             <button class="btn secondary-sm" style="flex: 0 0 35px; padding: 6px 0; text-align: center;" onclick="unlinkWallet()" title="Unlink Wallet">🔌</button>
                         </div>
                     </div>
-                    <div id="wallet-unlinked-view" class="wallet-body text-center" style="padding: 0; margin: 0;">
+                    <div id="wallet-unlinked-view" class="wallet-body text-center" style="padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                        <p class="wallet-text-sm">Link your Alumni Wallet to show your verified tag and balance.</p>
                         <button class="btn primary-sm glow full-width" style="padding: 10px 12px; font-weight: 800; font-size: 0.8rem;" onclick="triggerWalletUpload()" id="wallet-connect-btn">
-                            ⚡ Connect Wallet
+                            ⚡ Link Alumni Wallet
+                        </button>
+                        <button class="btn secondary-sm full-width" style="padding: 10px 12px; font-weight: 800; font-size: 0.8rem; border: 1px solid rgba(239, 68, 68, 0.25); color: #f87171; background: rgba(239, 68, 68, 0.04); margin-top: 4px;" onclick="handleLogout()" id="wallet-logout-btn">
+                            🔓 Logout
                         </button>
                     </div>
                 </div>
@@ -176,6 +209,9 @@
                         <li id="nav-trash" onclick="switchView('trash')">
                             <span class="nav-icon">🗑️</span> Trash
                         </li>
+                        <li id="nav-calendar" onclick="switchView('calendar')">
+                            <span class="nav-icon">📅</span> E2EE Calendar
+                        </li>
                         <li class="nav-divider">PRO FEATURES</li>
                         <li id="nav-domains" onclick="switchView('domains')">
                             <span class="nav-icon">🌐</span> Custom Domains
@@ -192,7 +228,7 @@
 
                 <div class="sidebar-footer">
                     <button class="btn secondary full-width" onclick="handleLogout()">
-                        <span>🔓</span> Lock Mailbox
+                        <span>🔓</span> Logout
                     </button>
                     <div class="system-node">
                         <span class="status-dot pulsing green"></span> Connected to Alumni Mail Node
@@ -470,6 +506,54 @@
                     </div>
                 </div>
 
+                <!-- VIEW E: ENCRYPTED CALENDAR -->
+                <div id="view-calendar" class="calendar-workspace glass-panel view-section hidden">
+                    <div class="view-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div>
+                            <h2>📅 E2EE Encrypted Calendar</h2>
+                            <p class="subtitle">Your scheduled meetings are encrypted locally using your public key and stored as secure cipher streams.</p>
+                        </div>
+                        <button class="btn primary glow" onclick="openAddMeetingModal()">
+                            ➕ Schedule Meeting
+                        </button>
+                    </div>
+
+                    <div class="calendar-layout" style="display: grid; grid-template-columns: 1fr 320px; gap: 20px; margin-top: 20px;">
+                        
+                        <!-- CALENDAR GRID -->
+                        <div class="calendar-main-card glass-panel" style="padding: 20px;">
+                            <div class="calendar-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <button class="btn secondary-sm" onclick="prevMonth()">◀</button>
+                                <h3 id="calendar-month-year" style="margin: 0; font-weight: 800; font-size: 1.2rem;">May 2026</h3>
+                                <button class="btn secondary-sm" onclick="nextMonth()">▶</button>
+                            </div>
+                            
+                            <!-- Days of Week Headers -->
+                            <div class="calendar-week-headers" style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-weight: 800; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px;">
+                                <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+                            </div>
+                            
+                            <!-- Calendar Days Grid -->
+                            <div id="calendar-days-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; min-height: 280px;">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+
+                        <!-- MEETING AGENDA LIST -->
+                        <div class="calendar-agenda-card glass-panel" style="padding: 20px; display: flex; flex-direction: column; height: 100%; min-height: 380px;">
+                            <h3 style="margin-top: 0; margin-bottom: 15px; font-weight: 800; font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                                🛡️ Agenda Details
+                            </h3>
+                            <div id="agenda-meetings-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                                <div class="text-center" style="color: var(--text-muted); margin-top: 20px; font-size: 0.85rem;">
+                                    Select a day to view decrypted meetings.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
                 <!-- VIEW D: SETTINGS -->
                 <div id="view-settings" class="settings-workspace glass-panel view-section hidden">
                     <div class="view-header">
@@ -478,6 +562,20 @@
                     </div>
 
                     <div class="settings-content">
+                        <div class="settings-card glass-panel" style="margin-bottom: 20px;">
+                            <h3>🧬 Biometric Authentication</h3>
+                            <p class="helper-text margin-b">Enable password-free login on this device using native biometric scanning (Face ID / Touch ID / Fingerprint). This securely links your local cryptographic vault to your device's hardware authenticator.</p>
+                            
+                            <div class="biometric-status-wrapper" style="margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; padding: 10px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+                                <span>Device Connection Status:</span>
+                                <span id="biometric-status-badge" class="badge secondary">Not Connected</span>
+                            </div>
+
+                            <button id="btn-register-biometrics" class="btn primary glow" onclick="registerBiometrics()">
+                                🔑 Register Device Biometrics
+                            </button>
+                        </div>
+
                         <div class="settings-card glass-panel">
                             <h3>Security Tools</h3>
                             <p class="helper-text margin-b">For developer audits and troubleshooting, you can wipe the complete database clean, resetting all generated RSA keys and secure data.</p>
@@ -603,7 +701,7 @@
             
             <form id="wallet-link-form" onsubmit="handleRegisterWallet(event)" class="auth-form active" style="display: flex; flex-direction: column; gap: 15px;">
                 <p class="subtitle" style="font-size: 0.75rem; line-height: 1.4; color: var(--text-dark); margin: 0;">
-                    Import your Elliptic Curve (secp256k1) PEM wallet. Enter your custom registered readable Tag/Alias to bind it directly to your email identity.
+                    Enter your Elliptic Curve (secp256k1) Private Key and custom registered Tag/Alias to link your Alumni L1 Wallet directly to your email identity.
                 </p>
                 
                 <div class="form-group">
@@ -616,12 +714,9 @@
                 </div>
                 
                 <div class="form-group">
-                    <label>Upload secp256k1 Wallet PEM File</label>
-                    <div class="drag-drop-area" id="wallet-drag-area" onclick="triggerWalletInput()">
-                        <span class="drag-icon">🔑</span>
-                        <span id="wallet-file-label">Click or Drag & Drop PEM File</span>
-                        <input type="file" id="wallet-pem-input" class="hidden" accept=".pem" onchange="handleWalletFileSelect(event)">
-                    </div>
+                    <label for="wallet-key-input">secp256k1 Private Key (PEM format or Hex string)</label>
+                    <textarea id="wallet-key-input" class="input-field" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----&#10;or raw Hex private key string" required style="resize: vertical; font-family: monospace; font-size: 0.75rem; min-height: 120px; line-height: 1.4; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 12px;"></textarea>
+                    <small class="helper-text" style="color: var(--text-dark); font-size: 0.7rem; margin-top: 4px;">Paste your private key. All operations are local and client-side only.</small>
                 </div>
 
                 <div id="wallet-link-error" class="auth-error-msg hidden"></div>
@@ -675,6 +770,136 @@
                 <div class="form-actions" style="margin-top: 5px;">
                     <button type="submit" class="btn primary glow full-width">
                         <span>🚀 Broadcast L1 Transaction</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SECTION 6B: UPGRADE ACCOUNT MODAL -->
+    <div id="upgrade-modal" class="modal-container hidden">
+        <div class="modal-card glass-panel" style="max-width: 580px; width: 100%; border: 1px solid var(--accent-light); box-shadow: 0 0 30px rgba(0, 229, 255, 0.15);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-weight: 800; color: var(--accent-light); font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                    💎 Upgrade to ALUMNI PRO
+                </h3>
+                <button class="btn-icon-close" onclick="closeUpgradeModal()">✕</button>
+            </div>
+            
+            <!-- Plan Billing Cycle Toggle -->
+            <div class="billing-cycle-toggle-wrapper" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; background: rgba(255, 255, 255, 0.02); padding: 8px; border-radius: 30px; border: 1px solid var(--border-color);">
+                <span id="label-billing-monthly" class="font-bold" style="font-size: 0.85rem; color: var(--text-color); cursor: pointer;" onclick="setBillingCycle('monthly')">Monthly Billing</span>
+                <div id="billing-cycle-switch" class="switch" style="position: relative; width: 44px; height: 22px; background: var(--accent-light); border-radius: 15px; cursor: pointer; transition: background 0.3s;" onclick="toggleBillingCycle()">
+                    <div id="billing-cycle-knob" class="knob" style="position: absolute; top: 2px; left: 24px; width: 18px; height: 18px; background: #000; border-radius: 50%; transition: left 0.3s;"></div>
+                </div>
+                <span id="label-billing-yearly" class="font-bold" style="font-size: 0.85rem; color: var(--accent-light); cursor: pointer;" onclick="setBillingCycle('yearly')">
+                    Yearly Billing <span style="background: var(--success); color: #000; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; margin-left: 4px;">SAVE 20%</span>
+                </span>
+            </div>
+
+            <!-- Plan Comparison Cards -->
+            <div class="upgrade-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <!-- FREE PLAN -->
+                <div class="plan-card glass-panel" style="padding: 15px; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 800;">ALUMNI Free</h4>
+                        <div class="plan-price" style="font-size: 1.5rem; font-weight: 800; margin-bottom: 12px; color: var(--text-muted);">$0.00</div>
+                        <ul style="padding-left: 15px; margin: 0; font-size: 0.75rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px;">
+                            <li>Secure E2EE Email</li>
+                            <li>Standard 100MB Database Storage</li>
+                            <li><strong>1 Free Custom Domain email</strong></li>
+                            <li>Standard L1 balance tracking</li>
+                        </ul>
+                    </div>
+                    <button class="btn secondary-sm full-width" style="margin-top: 15px; pointer-events: none; opacity: 0.5;">Current Tier</button>
+                </div>
+
+                <!-- PRO PLAN -->
+                <div class="plan-card glass-panel" style="padding: 15px; border: 1px solid var(--accent-light); position: relative; background: rgba(0, 229, 255, 0.02); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="position: absolute; top: -10px; right: 10px; background: var(--accent-light); color: #000; font-size: 0.65rem; font-weight: 800; padding: 2px 8px; border-radius: 10px;">RECOMMENDED</div>
+                    <div>
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 800; color: var(--accent-light);">ALUMNI Pro</h4>
+                        <div class="plan-price" style="display: flex; flex-direction: column; margin-bottom: 12px;">
+                            <div style="display: flex; align-items: baseline; gap: 4px;">
+                                <span id="pro-price-display" style="font-size: 1.5rem; font-weight: 800; color: var(--text-color);">$3.99</span>
+                                <span id="pro-period-display" style="font-size: 0.75rem; color: var(--text-muted);">/ month</span>
+                            </div>
+                            <span id="alumni-promo-badge" style="font-size: 0.7rem; color: var(--success-light); font-weight: 800; text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);">
+                                💥 Get 30% Off First Year with ALUMNI!
+                            </span>
+                        </div>
+                        <ul style="padding-left: 15px; margin: 0; font-size: 0.75rem; display: flex; flex-direction: column; gap: 8px;">
+                            <li><strong>Unlimited</strong> Custom Domains</li>
+                            <li><strong>Unlimited</strong> Custom Domain Aliases</li>
+                            <li>👑 Premium E2EE Calendar access</li>
+                            <li>🚀 High-speed Validator RPC priority</li>
+                            <li>🔒 Upgraded 10GB Secure Storage</li>
+                        </ul>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <!-- Payment Method Toggle -->
+                        <div class="payment-method-selector" style="display: flex; gap: 6px; margin-bottom: 8px;">
+                            <button id="pay-method-fiat" class="btn secondary-sm flex-1 font-bold active" onclick="setPaymentMethod('fiat')" style="padding: 4px 6px; font-size: 0.7rem;">💳 Credit Card</button>
+                            <button id="pay-method-token" class="btn secondary-sm flex-1 font-bold" onclick="setPaymentMethod('token')" style="padding: 4px 6px; font-size: 0.7rem;">🪙 ALUMNI Token</button>
+                        </div>
+                        
+                        <div id="fiat-payment-form" style="display: flex; flex-direction: column; gap: 6px;">
+                            <input type="text" id="upgrade-card-number" class="input-field" placeholder="Card Number (e.g., 4111 2222 3333 4444)" style="font-size: 0.75rem; padding: 6px 8px;">
+                            <button class="btn primary-sm glow full-width" onclick="submitFiatUpgrade()">Pay with Credit Card</button>
+                        </div>
+                        
+                        <div id="token-payment-form" class="hidden" style="display: flex; flex-direction: column; gap: 6px; text-align: center;">
+                            <div style="background: rgba(255,255,255,0.03); border: 1px dashed var(--border-color); padding: 8px; border-radius: 6px;">
+                                <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">L1 Total Payable (30% Off):</span>
+                                <span id="token-payable-display" class="accent-green font-bold font-mono" style="font-size: 1.1rem;">279 ALUMNI</span>
+                            </div>
+                            <button class="btn primary-sm glow full-width" onclick="submitTokenUpgrade()">🚀 Authorize L1 Token Payment</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="upgrade-error" class="auth-error-msg hidden" style="font-size: 0.75rem; margin-top: 10px;"></div>
+            <div id="upgrade-success" class="auth-success-msg hidden" style="color: var(--success-light); font-size: 0.75rem; margin-top: 10px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.2);"></div>
+        </div>
+    </div>
+
+    <!-- SECTION 6C: ADD MEETING MODAL -->
+    <div id="add-meeting-modal" class="modal-container hidden">
+        <div class="modal-card glass-panel" style="max-width: 440px; width: 100%;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-weight: 800; color: var(--accent-light); font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                    🛡️ Schedule Encrypted Meeting
+                </h3>
+                <button class="btn-icon-close" onclick="closeAddMeetingModal()">✕</button>
+            </div>
+            <form onsubmit="handleSaveMeeting(event)" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="form-group">
+                    <label for="meeting-title">Meeting Title</label>
+                    <input type="text" id="meeting-title" class="input-field" placeholder="Project Sync with Hal" required>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                        <label for="meeting-date">Date</label>
+                        <input type="date" id="meeting-date" class="input-field" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="meeting-time">Time</label>
+                        <input type="time" id="meeting-time" class="input-field" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="meeting-desc">Description (E2EE)</label>
+                    <textarea id="meeting-desc" class="input-field" style="min-height: 80px; resize: vertical;" placeholder="Discuss crypt keys and server sync. Fully encrypted."></textarea>
+                </div>
+                
+                <div class="alert warning" style="margin: 0; font-size: 0.75rem; padding: 8px 10px;">
+                    🔐 <strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.
+                </div>
+
+                <div class="form-actions" style="margin-top: 10px;">
+                    <button type="submit" class="btn primary glow full-width">
+                        <span>💾 Save Secure Event</span>
                     </button>
                 </div>
             </form>
