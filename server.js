@@ -1666,6 +1666,51 @@ app.post('/api/v1/twilio/send-sms', async (req, res) => {
     }
 });
 
+// POST /api/v1/twilio/make-call — initiate an outbound call from the user's virtual number
+app.post('/api/v1/twilio/make-call', async (req, res) => {
+    const { username, to } = req.body;
+    if (!username || !to) {
+        return res.status(400).json({ error: 'Missing username or to' });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    const user = db.users[normUser];
+    if (!user || !user.virtualNumber) {
+        return res.status(400).json({ error: 'No virtual number provisioned for this account.' });
+    }
+
+    if (!twilioClient) {
+        return res.status(503).json({ error: 'Voice relay not available in sandbox mode.' });
+    }
+
+    try {
+        const call = await twilioClient.calls.create({
+            twiml: `<Response><Say>Connecting your Alumni Mail secure call.</Say><Dial callerId="${user.virtualNumber}">${to}</Dial></Response>`,
+            from: user.virtualNumber,
+            to
+        });
+        console.log(`[TWILIO CALL] From: ${user.virtualNumber} → To: ${to} | SID: ${call.sid}`);
+
+        if (!user.phoneLogs) user.phoneLogs = [];
+        user.phoneLogs.unshift({
+            id: 'call_' + Math.random().toString(36).substring(2, 9),
+            timestamp: Date.now(),
+            type: 'voice_out',
+            from: user.virtualNumber,
+            to,
+            body: 'Outbound call placed',
+            live: true,
+            sid: call.sid
+        });
+        saveDB(db);
+
+        res.json({ success: true, sid: call.sid, from: user.virtualNumber, to });
+    } catch (e) {
+        console.error('[TWILIO MAKE CALL ERROR]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Serve Ethereal test inbox interface or standard root dashboard index
 app.get('*', (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

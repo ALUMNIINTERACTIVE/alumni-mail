@@ -3789,6 +3789,33 @@ function dialerSendSMS() {
     if (composeInput) composeInput.focus();
 }
 
+async function dialerMakeCall() {
+    if (!dialerValue || dialerValue.length < 7) {
+        alert('Please enter a phone number first.');
+        return;
+    }
+    const to = dialerValue.startsWith('+') ? dialerValue : '+1' + dialerValue.replace(/\D/g, '');
+
+    if (!confirm(`Call ${formatDialerInput(dialerValue)} from your virtual number?`)) return;
+
+    try {
+        const res = await fetch('/api/v1/twilio/make-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: session.username, to })
+        });
+        const data = await res.json();
+        if (data.success) {
+            addRecentActivity('outbound_call', to, 'Outbound call placed');
+            alert('Call initiated! Your phone will ring first, then connect to ' + formatDialerInput(dialerValue));
+        } else {
+            alert('Call failed: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Call failed: Server error');
+    }
+}
+
 // SMS Thread functions
 async function sendSMSFromThread() {
     const recipientInput = document.getElementById('sms-recipient-input');
