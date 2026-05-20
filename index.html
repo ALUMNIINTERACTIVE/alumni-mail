@@ -132,6 +132,25 @@
         <!-- SECTION 3: MAILBOX DASHBOARD VIEW -->
         <div id="dashboard-screen" class="dashboard-wrapper hidden">
             
+            <!-- MOBILE VIEW HEADER -->
+            <div class="mobile-header glass-panel">
+                <button id="mobile-menu-toggle" class="mobile-menu-btn" onclick="toggleMobileSidebar()" aria-label="Toggle navigation menu">
+                    <span class="hamburger-bar"></span>
+                    <span class="hamburger-bar"></span>
+                    <span class="hamburger-bar"></span>
+                </button>
+                <div class="mobile-brand">
+                    <span class="logo-glow">🔒</span>
+                    <h1>ALUMNI MAIL</h1>
+                </div>
+                <div class="mobile-right">
+                    <span class="badge success" style="font-size: 0.6rem; font-weight: 800; padding: 2px 6px;">E2EE</span>
+                </div>
+            </div>
+
+            <!-- MOBILE SIDEBAR BACKDROP -->
+            <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleMobileSidebar(false)"></div>
+
             <!-- LEFT NAVIGATION SIDEBAR -->
             <aside class="sidebar glass-panel">
                 <div class="brand">

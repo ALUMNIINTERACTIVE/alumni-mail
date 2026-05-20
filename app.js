@@ -100,10 +100,32 @@ function renderActiveViewData() {
     }
 }
 
+function toggleMobileSidebar(forceState) {
+    const sidebar = document.querySelector('.sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const toggleBtn = document.getElementById('mobile-menu-toggle');
+    
+    if (!sidebar || !backdrop) return;
+    
+    const isOpen = sidebar.classList.contains('open');
+    const targetState = typeof forceState === 'boolean' ? forceState : !isOpen;
+    
+    if (targetState) {
+        sidebar.classList.add('open');
+        backdrop.classList.add('active');
+        if (toggleBtn) toggleBtn.classList.add('active');
+    } else {
+        sidebar.classList.remove('open');
+        backdrop.classList.remove('active');
+        if (toggleBtn) toggleBtn.classList.remove('active');
+    }
+}
+
 // -------------------------------------------------------------
 // NAVIGATION & VIEWS SYSTEM
 // -------------------------------------------------------------
 function switchView(viewName) {
+    toggleMobileSidebar(false);
     session.activeView = viewName;
     session.activeEmailId = null;
     
@@ -473,7 +495,7 @@ async function handleBiometricLogin() {
             "jwk",
             vault.privateKey,
             { name: "RSA-OAEP", hash: "SHA-256" },
-            false,
+            true,
             ["decrypt"]
         );
 
@@ -866,6 +888,7 @@ function enterMailbox() {
 }
 
 function handleLogout() {
+    toggleMobileSidebar(false);
     // Clear all in-memory keys
     session.username = null;
     session.salt = null;

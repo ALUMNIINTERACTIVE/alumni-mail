@@ -80,7 +80,7 @@ async function deriveKeys(password, salt) {
         },
         baseKey,
         { name: "AES-GCM", length: 256 },
-        false,
+        true,
         ["encrypt", "decrypt"]
     );
 
@@ -167,7 +167,7 @@ async function decryptPrivateKey(ciphertextBase64, ivBase64, kdk) {
         "jwk",
         jwk,
         { name: "RSA-OAEP", hash: "SHA-256" },
-        false,
+        true,
         ["decrypt"]
     );
 }
