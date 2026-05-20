@@ -3715,16 +3715,10 @@ function dialContact(peer, callType) {
 function renderPhoneView() {
     const upgradeBlock = document.getElementById('phone-upgrade-block');
     const activeView = document.getElementById('phone-active-view');
-    if (!upgradeBlock || !activeView) return;
+    if (!activeView) return;
 
-    // Check tier
-    if (session.userTier !== 'Ultimate') {
-        upgradeBlock.classList.remove('hidden');
-        activeView.classList.add('hidden');
-        return;
-    }
-
-    upgradeBlock.classList.add('hidden');
+    // Always show the phone UI to all users — no tier gate
+    if (upgradeBlock) upgradeBlock.classList.add('hidden');
     activeView.classList.remove('hidden');
 
     // Fetch active virtual number status from server
