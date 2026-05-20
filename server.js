@@ -806,11 +806,9 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
     // SIMULATION FALLBACK (Robust demo mode when offline or L1 URL is unset)
     let simulatedBalance = 2500;
     try {
-        const keyOrAddress = req.body.keyOrAddress || "";
-        let seedString = tag;
-        if (keyOrAddress && keyOrAddress !== "READ_ONLY") {
-            seedString = deriveNormalizedAddress(keyOrAddress);
-        }
+        // Compute simulated balance strictly and stably from the unique registered wallet tag
+        // This ensures consistent balance irrespective of watch-only vs private key link mode
+        let seedString = tag.trim().toUpperCase();
         let numericHash = 0;
         for (let i = 0; i < seedString.length; i++) {
             numericHash += seedString.charCodeAt(i);
