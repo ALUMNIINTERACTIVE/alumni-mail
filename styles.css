@@ -313,8 +313,27 @@ body {
     justify-content: center;
     box-shadow: 0 0 20px var(--accent-glow);
 }
+.brand-logo .logo-img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+}
+.logo-img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+}
+.secure-logo-img {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 8px var(--success-light));
+}
 .logo-lock {
     font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .auth-header h1 {
     font-size: 1.8rem;
@@ -504,14 +523,23 @@ body {
     padding-bottom: 15px;
     border-bottom: 1px solid var(--border-color);
 }
-.sidebar .brand h1 {
+.sidebar .brand h2 {
     font-size: 1.1rem;
     font-weight: 800;
+    margin: 0;
     letter-spacing: -0.5px;
 }
 .logo-glow {
     font-size: 1.4rem;
     text-shadow: 0 0 10px var(--accent-glow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.logo-glow .logo-img {
+    width: 24px;
+    height: 24px;
+    filter: drop-shadow(0 0 4px var(--accent-light));
 }
 
 .session-user-info {
@@ -1623,7 +1651,7 @@ body {
         gap: 8px;
     }
     
-    .mobile-brand h1 {
+    .mobile-brand h2 {
         font-size: 1rem;
         font-weight: 800;
         margin: 0;

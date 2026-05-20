@@ -610,24 +610,24 @@ app.post('/api/mail/send', async (req, res) => {
 
         if (isPasswordProtected) {
             // PROTON-STYLE PASSWORD SECURE PORTAL MAIL
-            emailSubject = `🔑 Secure Encrypted Email from ${normSender}`;
+            emailSubject = `[SECURE] Encrypted Email from ${normSender}`;
             
             const portalUrl = `${liveHostUrl}/?portal=true&emailId=${emailId}&recipient=${encodeURIComponent(normRecipient)}`;
 
             emailHtml = `
                 <div style="font-family: sans-serif; background-color: #060913; color: #ffffff; padding: 30px; border-radius: 12px; max-width: 600px; margin: auto; border: 1px solid #1e293b;">
-                    <h2 style="color: #10b981; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-top: 0;">🔒 Secure E2EE Portal Delivery</h2>
+                    <h2 style="color: #10b981; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-top: 0;">[SECURE] E2EE Portal Delivery</h2>
                     <p style="color: #94a3b8; font-size: 16px;">You have received a password-protected encrypted message from <strong>${normSender}</strong> under the Alumni Mail privacy network.</p>
                     
                     <div style="background-color: rgba(16, 185, 129, 0.05); border: 1px dashed #10b981; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                        <span style="color: #10b981; font-weight: bold; display: block; margin-bottom: 5px;">🔑 Security Password Hint:</span>
+                        <span style="color: #10b981; font-weight: bold; display: block; margin-bottom: 5px;">Security Password Hint:</span>
                         <span style="color: #cbd5e1; font-style: italic;">"${passwordHint || 'No hint provided.'}"</span>
                     </div>
 
                     <p style="color: #94a3b8;">To unlock this message and perform local browser decryption, click the secure portal button below:</p>
                     
                     <div style="text-align: center; margin: 30px 0;">
-                        <a href="${portalUrl}" style="background-color: #10b981; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; display: inline-block; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);">🔓 Unlock Secure Message</a>
+                        <a href="${portalUrl}" style="background-color: #10b981; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; display: inline-block; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);">Unlock Secure Message</a>
                     </div>
 
                     <p style="color: #64748b; font-size: 12px; border-top: 1px solid #1e293b; padding-top: 15px; margin-bottom: 0;">Alumni Mail uses zero-knowledge client hybrid cryptography (RSA + AES-GCM) running entirely inside web sandbox structures.</p>
@@ -681,7 +681,7 @@ app.post('/api/mail/send', async (req, res) => {
         // If Ethereal test account, print out the link!
         const previewUrl = nodemailer.getTestMessageUrl(info);
         if (previewUrl) {
-            console.log(`\n📬 [TEST DELIVERY PENDING] Inspect email here:\n👉 ${previewUrl}\n`);
+            console.log(`\n[TEST DELIVERY PENDING] Inspect email here:\n[LINK] ${previewUrl}\n`);
             // We append a secure system audit log to the auditor
             auditLog("SMTP RELAY", `Email successfully sent! Preview URL: ${previewUrl}`);
         }
@@ -1112,8 +1112,8 @@ app.get('*', (req, res) => {
 // BOOTSTRAPPING SERVER
 // -------------------------------------------------------------
 app.listen(PORT, async () => {
-    console.log(`\n🚀 [SERVER] Alumni Mail backend running live at http://localhost:${PORT}`);
-    console.log(`📱 [MOBILE ACCESS] To connect securely on a mobile phone for E2EE cryptography:`);
-    console.log(`   👉 Use a secure tunnel: run 'npx localtunnel --port ${PORT}' or use ngrok, then load the HTTPS URL on your phone.\n`);
+    console.log(`\n[SERVER] Alumni Mail backend running live at http://localhost:${PORT}`);
+    console.log(`[MOBILE ACCESS] To connect securely on a mobile phone for E2EE cryptography:`);
+    console.log(`   Use a secure tunnel: run 'npx localtunnel --port ${PORT}' or use ngrok, then load the HTTPS URL on your phone.\n`);
     await initSMTPTransporter();
 });

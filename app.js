@@ -201,7 +201,7 @@ function renderBiometricSettings() {
         badge.innerText = "Unavailable (Insecure Context)";
         badge.className = "badge danger";
         button.disabled = true;
-        button.innerText = "❌ Requires Secure HTTPS/Localhost";
+        button.innerText = "Requires Secure HTTPS/Localhost";
         return;
     }
 
@@ -209,12 +209,12 @@ function renderBiometricSettings() {
     if (hasVault) {
         badge.innerText = "Active & Linked";
         badge.className = "badge success";
-        button.innerText = "🔗 Unlink Device Biometrics";
+        button.innerText = "Unlink Device Biometrics";
         button.className = "btn primary glow danger";
     } else {
         badge.innerText = "Not Connected";
         badge.className = "badge secondary";
-        button.innerText = "🔑 Register Device Biometrics";
+        button.innerText = "Register Device Biometrics";
         button.className = "btn primary glow";
     }
 }
@@ -247,7 +247,7 @@ async function registerBiometrics() {
 
     try {
         button.disabled = true;
-        button.innerText = "⏳ Generating options...";
+        button.innerText = "[..] Generating options...";
 
         // Step 1: Fetch options
         const res = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/webauthn/register-options?username=${encodeURIComponent(session.username)}`);
@@ -260,7 +260,7 @@ async function registerBiometrics() {
         options.challenge = base64urlToBuffer(options.challenge);
         options.user.id = base64urlToBuffer(options.user.id);
 
-        button.innerText = "🧬 Verify Identity Prompt...";
+        button.innerText = "[PROMPT] Verify Identity Prompt...";
 
         // Step 2: Prompt Touch ID / Face ID
         const credential = await navigator.credentials.create({ publicKey: options });
@@ -268,7 +268,7 @@ async function registerBiometrics() {
             throw new Error("WebAuthn authenticator failed to return credential.");
         }
 
-        button.innerText = "⏳ Syncing credentials...";
+        button.innerText = "[..] Syncing credentials...";
 
         // Step 3: Serialize and send to server
         const rawPubKey = credential.response.getPublicKey();
@@ -291,7 +291,7 @@ async function registerBiometrics() {
         }
 
         // Step 4: Encrypt KDK and Private Key to secure local vault container
-        button.innerText = "🔒 Building local E2EE Vault...";
+        button.innerText = "[SECURE] Building local E2EE Vault...";
 
         const rawKdk = await window.crypto.subtle.exportKey("raw", session.kdk);
         const jwkPrivateKey = await window.crypto.subtle.exportKey("jwk", session.privateKey);
@@ -328,7 +328,7 @@ async function registerBiometrics() {
             iv: bufferToBase64url(iv)
         }));
 
-        alert("🎉 Device Biometrics successfully registered! You can now log in password-free on this device.");
+        alert("Device Biometrics successfully registered! You can now log in password-free on this device.");
         renderBiometricSettings();
 
     } catch (err) {
@@ -391,7 +391,7 @@ async function handleBiometricLogin() {
     }
 
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', '🧬 Contacting server and prompting device biometrics...');
+    updateCryptoOverlayStep('pbkdf2', 'active', '[INIT] Contacting server and prompting device biometrics...');
 
     try {
         // Step 2: Fetch assertion options
@@ -409,8 +409,8 @@ async function handleBiometricLogin() {
             });
         }
 
-        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ WebAuthn options loaded.');
-        updateCryptoOverlayStep('rsa', 'active', '🧬 Please scan Face ID / Touch ID when prompted...');
+        updateCryptoOverlayStep('pbkdf2', 'completed', '[OK] WebAuthn options loaded.');
+        updateCryptoOverlayStep('rsa', 'active', '[PROMPT] Please scan Face ID / Touch ID when prompted...');
 
         // Step 3: Prompt native browser Touch ID / Face ID
         const assertion = await navigator.credentials.get({ publicKey: options });
@@ -418,8 +418,8 @@ async function handleBiometricLogin() {
             throw new Error("Biometric scan cancelled or rejected.");
         }
 
-        updateCryptoOverlayStep('rsa', 'completed', '✅ Biometric signature generated.');
-        updateCryptoOverlayStep('aes', 'active', '🔒 Verifying biometric signature on server...');
+        updateCryptoOverlayStep('rsa', 'completed', '[OK] Biometric signature generated.');
+        updateCryptoOverlayStep('aes', 'active', '[SECURE] Verifying biometric signature on server...');
 
         // Step 4: Verify signature on server
         const clientDataJSON = bufferToBase64url(assertion.response.clientDataJSON);
@@ -447,8 +447,8 @@ async function handleBiometricLogin() {
         const loginData = await verifyRes.json();
         const resolvedUsername = loginData.username;
 
-        updateCryptoOverlayStep('aes', 'completed', '✅ Signature authenticated by server.');
-        updateCryptoOverlayStep('db', 'active', '🔓 Decrypting E2EE vault locally...');
+        updateCryptoOverlayStep('aes', 'completed', '[OK] Signature authenticated by server.');
+        updateCryptoOverlayStep('db', 'active', '[DECRYPT] Decrypting E2EE vault locally...');
 
         // Step 5: Load local biometric vault keys and decrypt
         const bioKeyHex = localStorage.getItem(`biometric_key_${resolvedUsername}`);
@@ -508,13 +508,13 @@ async function handleBiometricLogin() {
         session.encPrivateKey = loginData.encPrivateKey;
         session.userTier = loginData.tier || 'Free';
 
-        updateCryptoOverlayStep('db', 'completed', '✅ Cryptographic identity unlocked.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] Cryptographic identity unlocked.');
         showCryptoOverlay();
 
         // Step 7: Synchronize complete mailbox workspace
-        updateCryptoOverlayStep('db', 'active', '🔄 Synchronizing secure emails, domains, and aliases...');
+        updateCryptoOverlayStep('db', 'active', '[SYNC] Synchronizing secure emails, domains, and aliases...');
         await window.AlumniMailDB.syncUserData(resolvedUsername);
-        updateCryptoOverlayStep('db', 'completed', '✅ E2EE Workspace synchronized.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] E2EE Workspace synchronized.');
 
         // Establish mailbox session
         logActiveMemorySecrets();
@@ -573,7 +573,7 @@ async function handleRegister(event) {
     // Secure Context check
     const isSecure = window.isSecureContext && window.crypto && window.crypto.subtle;
     if (!isSecure) {
-        errorEl.innerHTML = `⚠️ <strong>Security Policy Restriction:</strong> E2EE Key Generation requires a secure context (HTTPS or localhost).<br><br>
+        errorEl.innerHTML = `<strong>Security Policy Restriction:</strong> E2EE Key Generation requires a secure context (HTTPS or localhost).<br><br>
         To register and generate your keys securely on your phone:
         <ul style="margin: 8px 0 0 0; padding-left: 20px; text-align: left; font-size: 0.85rem; line-height: 1.4;">
             <li>Start a secure tunnel on your computer: run <code style="background:rgba(255,255,255,0.15); padding:2px 4px; border-radius:3px;">npx localtunnel --port 8000</code> or use ngrok.</li>
@@ -632,32 +632,32 @@ async function handleRegister(event) {
     
     try {
         // Step 1: PBKDF2 key derivation
-        updateCryptoOverlayStep('pbkdf2', 'active', '🔑 Running PBKDF2-HMAC-SHA256 (10,000 iterations)...');
+        updateCryptoOverlayStep('pbkdf2', 'active', '[INIT] Running PBKDF2-HMAC-SHA256 (10,000 iterations)...');
         const saltBytes = window.crypto.getRandomValues(new Uint8Array(16));
         const saltBase64 = window.AlumniMailCrypto.bufferToBase64(saltBytes);
         const { kdk, authHash } = await window.AlumniMailCrypto.deriveKeys(passwordInput, saltBase64);
-        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ Keys derived locally in browser.');
+        updateCryptoOverlayStep('pbkdf2', 'completed', '[OK] Keys derived locally in browser.');
 
         // Step 2: Generate RSA-OAEP 2048-bit keys
-        updateCryptoOverlayStep('rsa', 'active', '🔒 Generating RSA-OAEP 2048-bit Key Pair...');
+        updateCryptoOverlayStep('rsa', 'active', '[GEN] Generating RSA-OAEP 2048-bit Key Pair...');
         const keypair = await window.AlumniMailCrypto.generateRSAKeyPair();
         const publicJwk = await window.crypto.subtle.exportKey("jwk", keypair.publicKey);
-        updateCryptoOverlayStep('rsa', 'completed', '✅ 2048-bit E2EE Keys generated.');
+        updateCryptoOverlayStep('rsa', 'completed', '[OK] 2048-bit E2EE Keys generated.');
 
         // Step 3: Encrypt the Private key locally using AES-GCM
-        updateCryptoOverlayStep('aes', 'active', '🔒 Encrypting RSA Private Key with AES-GCM-256...');
+        updateCryptoOverlayStep('aes', 'active', '[SECURE] Encrypting RSA Private Key with AES-GCM-256...');
         const encPrivateKey = await window.AlumniMailCrypto.encryptPrivateKey(keypair.privateKey, kdk);
-        updateCryptoOverlayStep('aes', 'completed', '✅ Private Key successfully encrypted.');
+        updateCryptoOverlayStep('aes', 'completed', '[OK] Private Key successfully encrypted.');
 
         // Step 4: Write profile to mock server
-        updateCryptoOverlayStep('db', 'active', '📤 Registering Zero-Knowledge Profile on server...');
+        updateCryptoOverlayStep('db', 'active', '[SYNC] Registering Zero-Knowledge Profile on server...');
         await window.AlumniMailDB.registerUser(fullUsername, authHash, saltBase64, publicJwk, encPrivateKey);
-        updateCryptoOverlayStep('db', 'completed', '✅ Secure ID registered successfully.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] Secure ID registered successfully.');
 
         // Step 5: Synchronize clean workspace state
-        updateCryptoOverlayStep('db', 'active', '🔄 Initializing secure workspace...');
+        updateCryptoOverlayStep('db', 'active', '[INIT] Initializing secure workspace...');
         await window.AlumniMailDB.syncUserData(fullUsername);
-        updateCryptoOverlayStep('db', 'completed', '✅ Secure Workspace initialized.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] Secure Workspace initialized.');
 
         // Save session in memory (never written to LocalStorage in plain text!)
         session.username = fullUsername;
@@ -701,7 +701,7 @@ async function handleLogin(event) {
     // Secure Context check
     const isSecure = window.isSecureContext && window.crypto && window.crypto.subtle;
     if (!isSecure) {
-        errorEl.innerHTML = `⚠️ <strong>Security Policy Restriction:</strong> Zero-Knowledge client-side E2EE requires a secure context (HTTPS or localhost).<br><br>
+        errorEl.innerHTML = `<strong>Security Policy Restriction:</strong> Zero-Knowledge client-side E2EE requires a secure context (HTTPS or localhost).<br><br>
         To access and decrypt your emails securely on a phone:
         <ul style="margin: 8px 0 0 0; padding-left: 20px; text-align: left; font-size: 0.85rem; line-height: 1.4;">
             <li>Start a secure tunnel on your computer: run <code style="background:rgba(255,255,255,0.15); padding:2px 4px; border-radius:3px;">npx localtunnel --port 8000</code> or use ngrok.</li>
@@ -714,7 +714,7 @@ async function handleLogin(event) {
     const fullUsername = usernameInput.includes('@') ? usernameInput : `${usernameInput}@alumnimail.app`;
 
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', '🔑 Querying user salt & running PBKDF2...');
+    updateCryptoOverlayStep('pbkdf2', 'active', '[INIT] Querying user salt & running PBKDF2...');
 
     try {
         // Step 1: Retrieve user salt from server
@@ -746,10 +746,10 @@ async function handleLogin(event) {
 
         // Step 2: Derive master key Decryption Key (kdk) and authHash locally using PBKDF2
         const { kdk, authHash } = await window.AlumniMailCrypto.deriveKeys(passwordInput, salt);
-        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ Passphrase derived.');
+        updateCryptoOverlayStep('pbkdf2', 'completed', '[OK] Passphrase derived.');
 
         // Step 3: Verify authHash on server & retrieve E2EE parameters
-        updateCryptoOverlayStep('rsa', 'active', '🔒 Verifying ZK challenge and retrieving E2EE keys...');
+        updateCryptoOverlayStep('rsa', 'active', '[SECURE] Verifying ZK challenge and retrieving E2EE keys...');
         let loginData;
         try {
             const loginRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/login`, {
@@ -768,10 +768,10 @@ async function handleLogin(event) {
             errorEl.classList.remove('hidden');
             return;
         }
-        updateCryptoOverlayStep('rsa', 'completed', '✅ ZK credentials verified by server.');
+        updateCryptoOverlayStep('rsa', 'completed', '[OK] ZK credentials verified by server.');
 
         // Step 4: Decrypt private key locally using KDK
-        updateCryptoOverlayStep('aes', 'active', '🔓 Restoring RSA Private key in browser memory...');
+        updateCryptoOverlayStep('aes', 'active', '[DECRYPT] Restoring RSA Private key in browser memory...');
         let privKey;
         try {
             privKey = await window.AlumniMailCrypto.decryptPrivateKey(
@@ -779,7 +779,7 @@ async function handleLogin(event) {
                 loginData.encPrivateKey.iv,
                 kdk
             );
-            updateCryptoOverlayStep('aes', 'completed', '✅ Private Key loaded and decrypted locally.');
+            updateCryptoOverlayStep('aes', 'completed', '[OK] Private Key loaded and decrypted locally.');
         } catch (err) {
             hideCryptoOverlay();
             errorEl.innerText = "Decryption failure. The password could not unlock your cryptographic private key.";
@@ -796,9 +796,9 @@ async function handleLogin(event) {
         );
 
         // Step 6: Synchronize all secure data (emails, domains, aliases) from the server
-        updateCryptoOverlayStep('db', 'active', '🔄 Synchronizing secure emails, domains, and aliases...');
+        updateCryptoOverlayStep('db', 'active', '[SYNC] Synchronizing secure emails, domains, and aliases...');
         await window.AlumniMailDB.syncUserData(fullUsername);
-        updateCryptoOverlayStep('db', 'completed', '✅ E2EE Workspace synchronized.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] E2EE Workspace synchronized.');
 
         // Keep decrypted key strictly in transient memory!
         session.username = fullUsername;
@@ -926,7 +926,7 @@ function handleLogout() {
     }
     const connectBtn = document.getElementById('wallet-connect-btn');
     if (connectBtn) {
-        connectBtn.innerText = "⚡ Connect Wallet";
+        connectBtn.innerText = "Connect Wallet";
         connectBtn.disabled = false;
     }
 
@@ -1059,7 +1059,7 @@ function unlinkWallet() {
         statusBadge.className = "wallet-status disconnected";
     }
     if (connectBtn) {
-        connectBtn.innerText = "⚡ Link Alumni Wallet";
+        connectBtn.innerText = "Link Alumni Wallet";
         connectBtn.disabled = false;
     }
     
@@ -1209,7 +1209,7 @@ function renderMailList() {
     if (filtered.length === 0) {
         listContainer.innerHTML = `
             <div class="empty-state-list">
-                <span class="empty-icon">📥</span>
+                <span class="empty-icon"></span>
                 <p>No messages in ${session.activeView}</p>
             </div>
         `;
@@ -1224,12 +1224,12 @@ function renderMailList() {
         // Formulate readable snippet and subject (we display un-decrypted indicators until opened, or simulate partial text)
         const dateStr = new Date(email.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
-        // Show secure lock icons or password protection badges
-        let lockIndicator = '🔒';
+        // Show secure lock indicators or password protection badges
+        let lockIndicator = '[SECURE]';
         if (email.isPasswordProtected) {
-            lockIndicator = '🔑';
+            lockIndicator = '[PASSWORD SECURED]';
         } else if (!email.encryptedSessionKey) {
-            lockIndicator = '⚠️ Plaintext';
+            lockIndicator = '[PLAINTEXT]';
         }
 
         card.innerHTML = `
@@ -1237,7 +1237,7 @@ function renderMailList() {
                 <span class="card-sender" title="${email.sender}">${email.sender}</span>
                 <span class="card-date">${dateStr}</span>
             </div>
-            <div class="card-subject">${email.read ? '🔓' : lockIndicator} Encrypted Payload Item</div>
+            <div class="card-subject">${email.read ? '[READ]' : lockIndicator} Encrypted Payload Item</div>
             <div class="card-snippet">Content locked. Client decryption required.</div>
         `;
 
@@ -1283,7 +1283,7 @@ async function openEmailDetails(emailId) {
     // Reset Views
     document.getElementById('detail-body-decrypted').classList.remove('hidden');
     document.getElementById('detail-body-ciphertext').classList.add('hidden');
-    document.getElementById('btn-toggle-cipher').innerText = "👁️ View Ciphertext";
+    document.getElementById('btn-toggle-cipher').innerText = "View Ciphertext";
 
     // Dynamic Security Header Configuration
     const secDot = document.getElementById('security-badge-card').querySelector('.secure-indicator-dot');
@@ -1292,22 +1292,22 @@ async function openEmailDetails(emailId) {
 
     if (email.isPasswordProtected) {
         secDot.className = "secure-indicator-dot warning";
-        secTitle.innerText = "🔑 Password Encrypted Secure Portal";
+        secTitle.innerText = "[PORTAL] Password Encrypted Secure Portal";
         secText.innerText = "This email was secured with a custom password. To read its contents, it must be unlocked with the shared secret passphrase.";
         
         // Decrypted body will trigger the secure password portal popup
-        document.getElementById('detail-subject').innerText = "🔒 Password Protected Payload";
+        document.getElementById('detail-subject').innerText = "[SECURE] Password Protected Payload";
         document.getElementById('detail-body-decrypted').innerHTML = `
             <div class="alert warning text-center">
                 <strong>Password Protected Session Required</strong><br>
                 This content is locked with a custom shared password.<br><br>
-                <button class="btn primary glow" onclick="openExternalReaderModal('${email.id}')">🔓 Unlock Secure Message</button>
+                <button class="btn primary glow" onclick="openExternalReaderModal('${email.id}')">Unlock Secure Message</button>
             </div>
         `;
     } else if (!email.encryptedSessionKey) {
         // Plaintext SMTP mock delivery
         secDot.className = "secure-indicator-dot warning";
-        secTitle.innerText = "⚠️ External SMTP Delivery (Plaintext)";
+        secTitle.innerText = "[PLAINTEXT] External SMTP Delivery (Plaintext)";
         secText.innerText = "This message was received without cryptographic key negotiation. Content was transmitted plaintext across clear text channels.";
         
         // Render plaintext fields immediately
@@ -1322,7 +1322,7 @@ async function openEmailDetails(emailId) {
     } else {
         // Full standard E2EE
         secDot.className = "secure-indicator-dot secure";
-        secTitle.innerText = "🔒 End-to-End Encrypted (E2EE)";
+        secTitle.innerText = "[E2EE] End-to-End Encrypted (E2EE)";
         secText.innerText = "This message was encrypted on the sender's client and decrypted locally in your browser using your derived RSA private key. The server only sees base64 ciphertext.";
 
         // Execute actual browser-native decryption
@@ -1365,7 +1365,7 @@ async function openEmailDetails(emailId) {
 
         } catch (err) {
             console.error(err);
-            document.getElementById('detail-subject').innerText = "❌ Decryption Failure";
+            document.getElementById('detail-subject').innerText = "[ERROR] Decryption Failure";
             document.getElementById('detail-body-decrypted').innerHTML = `
                 <div class="alert warning">
                     <strong>Cryptographic Decryption Error</strong><br>
@@ -1385,11 +1385,11 @@ function toggleCiphertext() {
     if (cipherBody.classList.contains('hidden')) {
         decBody.classList.add('hidden');
         cipherBody.classList.remove('hidden');
-        btn.innerText = "👁️ View Decrypted Body";
+        btn.innerText = "View Decrypted Body";
     } else {
         decBody.classList.remove('hidden');
         cipherBody.classList.add('hidden');
-        btn.innerText = "👁️ View Ciphertext";
+        btn.innerText = "View Ciphertext";
     }
 }
 
@@ -1453,6 +1453,57 @@ function closeComposer() {
     document.getElementById('composer-modal').classList.add('hidden');
 }
 
+function replyToActiveEmail() {
+    if (!session.activeEmailId) return;
+    const fromEl = document.getElementById('detail-from');
+    const toEl = document.getElementById('detail-to');
+    const subjectEl = document.getElementById('detail-subject');
+    const bodyEl = document.getElementById('detail-body-decrypted');
+    const dateEl = document.getElementById('detail-date');
+    if (!fromEl || !subjectEl || !bodyEl || !dateEl) return;
+    
+    const sender = fromEl.textContent.trim();
+    let subject = subjectEl.textContent.trim();
+    
+    // Clean up existing secure prefixes/emojis if any
+    subject = subject.replace(/^\[SECURE\]\s*/i, '');
+    subject = subject.replace(/^\[UNREAD\]\s*/i, '');
+    subject = subject.replace(/^\[READ\]\s*/i, '');
+    subject = subject.replace(/^\[PASSWORD SECURED\]\s*/i, '');
+    subject = subject.replace(/^\[PLAINTEXT\]\s*/i, '');
+    subject = subject.trim();
+    
+    if (!subject.toLowerCase().startsWith('re:')) {
+        subject = 'Re: ' + subject;
+    }
+    const body = bodyEl.innerText.trim();
+    const date = dateEl.textContent.trim();
+    const quotedBody = `\n\n\nOn ${date}, <${sender}> wrote:\n> ` + body.split('\n').join('\n> ');
+    
+    openComposer();
+    
+    // Set recipient
+    document.getElementById('compose-to').value = sender;
+    
+    // Set compose-from matching the original recipient if it's one of user's active addresses
+    if (toEl) {
+        const originalRecipient = toEl.textContent.trim();
+        const fromSelect = document.getElementById('compose-from');
+        for (let i = 0; i < fromSelect.options.length; i++) {
+            if (fromSelect.options[i].value === originalRecipient) {
+                fromSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    document.getElementById('compose-subject').value = subject;
+    document.getElementById('compose-body').value = quotedBody;
+    
+    evaluateRecipientKeys();
+    document.getElementById('compose-body').focus();
+}
+
 function evaluateRecipientKeys() {
     const toInput = document.getElementById('compose-to').value.trim();
     const secCard = document.getElementById('composer-sec-card');
@@ -1477,14 +1528,14 @@ function evaluateRecipientKeys() {
         // Recipient E2EE available!
         secCard.className = "composer-security-status success";
         secDot.className = "status-dot pulsing emerald";
-        secText.innerText = "🔒 Recipient E2EE Crypt Key Active";
+        secText.innerText = "[E2EE] Recipient E2EE Crypt Key Active";
         passToggleWrapper.classList.add('hidden');
         document.getElementById('password-options-panel').classList.add('hidden');
     } else {
         // No native keys found
         secCard.className = "composer-security-status plaintext";
         secDot.className = "status-dot pulsing amber";
-        secText.innerText = "⚠️ Plaintext Channel: No recipient public key in registry.";
+        secText.innerText = "[PLAINTEXT] Plaintext Channel: No recipient public key in registry.";
         passToggleWrapper.classList.remove('hidden');
     }
 }
@@ -1500,12 +1551,12 @@ function togglePasswordEncryptOptions() {
         passPanel.classList.remove('hidden');
         secCard.className = "composer-security-status success";
         secDot.className = "status-dot pulsing blue";
-        secText.innerText = "🔑 Hybrid Password Protected Portal Channel Active";
+        secText.innerText = "[PORTAL] Hybrid Password Protected Portal Channel Active";
     } else {
         passPanel.classList.add('hidden');
         secCard.className = "composer-security-status plaintext";
         secDot.className = "status-dot pulsing amber";
-        secText.innerText = "⚠️ Plaintext Channel: No recipient public key in registry.";
+        secText.innerText = "[PLAINTEXT] Plaintext Channel: No recipient public key in registry.";
     }
 }
 
@@ -1735,14 +1786,14 @@ function selectDomainForDns(domainName) {
 
     if (dom.isVerified) {
         badge.className = "badge success";
-        badge.innerText = "✅ DOMAIN VERIFIED";
+        badge.innerText = "DOMAIN VERIFIED";
         verifyBtn.classList.add('hidden');
         aliasSection.classList.remove('hidden');
         document.getElementById('alias-domain-label').innerText = `@${dom.domainName}`;
         renderAliasesList(dom.domainName);
     } else {
         badge.className = "badge warning";
-        badge.innerText = "⏳ PENDING DNS VERIFICATION";
+        badge.innerText = "PENDING DNS VERIFICATION";
         verifyBtn.classList.remove('hidden');
         aliasSection.classList.add('hidden');
     }
@@ -1758,10 +1809,10 @@ function updateDnsRecordRowStatus(recType, isResolved) {
     const el = document.getElementById(`dns-status-${recType}`);
     if (isResolved) {
         el.className = "status-icon verified";
-        el.innerHTML = "✅ Resolved";
+        el.innerHTML = "Resolved";
     } else {
         el.className = "status-icon";
-        el.innerHTML = "⏳ Pending";
+        el.innerHTML = "Pending";
     }
 }
 
@@ -1803,7 +1854,7 @@ function simulateDNSVerification() {
 
     const verifyBtn = document.getElementById('btn-dns-verify');
     verifyBtn.disabled = true;
-    verifyBtn.innerText = "🔍 Querying NS Authorities...";
+    verifyBtn.innerText = "Querying NS Authorities...";
 
     const records = ['mx', 'spf', 'dkim', 'dmarc'];
     let delay = 600;
@@ -1811,7 +1862,7 @@ function simulateDNSVerification() {
     records.forEach((rec, idx) => {
         setTimeout(() => {
             const el = document.getElementById(`dns-status-${rec}`);
-            el.innerHTML = "🔄 Validating record...";
+            el.innerHTML = "Validating record...";
             
             setTimeout(() => {
                 const dom = window.AlumniMailDB.verifyDomainRecord(activeDnsDomainName, rec);
@@ -1846,7 +1897,7 @@ function renderAliasesList(domainName) {
         const li = document.createElement('li');
         li.innerHTML = `
             <span>${alias.email}</span>
-            <span class="alias-badge-secure">🔒 E2EE Key Pair Active</span>
+            <span class="alias-badge-secure">[SECURE] E2EE Key Pair Active</span>
         `;
         ul.appendChild(li);
     });
@@ -1877,26 +1928,26 @@ async function handleCreateAlias(event) {
 
     // Deploy cryptographic keys for this specific alias!
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', '🔑 Querying local session master seed...');
+    updateCryptoOverlayStep('pbkdf2', 'active', '[..] Querying local session master seed...');
     
     try {
         // Step 1: RSA Key Generation specific to the alias
-        updateCryptoOverlayStep('pbkdf2', 'completed', '✅ Session verified.');
-        updateCryptoOverlayStep('rsa', 'active', `🔒 Generating RSA-OAEP 2048-bit keys for ${fullAlias}...`);
+        updateCryptoOverlayStep('pbkdf2', 'completed', '[OK] Session verified.');
+        updateCryptoOverlayStep('rsa', 'active', `[..] Generating RSA-OAEP 2048-bit keys for ${fullAlias}...`);
         
         const aliasKeypair = await window.AlumniMailCrypto.generateRSAKeyPair();
         const aliasPubJwk = await window.crypto.subtle.exportKey("jwk", aliasKeypair.publicKey);
-        updateCryptoOverlayStep('rsa', 'completed', '✅ Cryptographic keys deployed.');
+        updateCryptoOverlayStep('rsa', 'completed', '[OK] Cryptographic keys deployed.');
 
         // Step 2: Encrypt the alias private key locally under the user's primary KDK in memory!
-        updateCryptoOverlayStep('aes', 'active', `🔒 Encrypting alias private key with AES-GCM under KDK...`);
+        updateCryptoOverlayStep('aes', 'active', `[..] Encrypting alias private key with AES-GCM under KDK...`);
         const encPrivateKey = await window.AlumniMailCrypto.encryptPrivateKey(aliasKeypair.privateKey, session.kdk);
-        updateCryptoOverlayStep('aes', 'completed', '✅ Private Key encrypted locally.');
+        updateCryptoOverlayStep('aes', 'completed', '[OK] Private Key encrypted locally.');
 
         // Step 3: Save to DB alias schema
-        updateCryptoOverlayStep('db', 'active', '📤 Transmitting alias registers to server...');
+        updateCryptoOverlayStep('db', 'active', '[..] Transmitting alias registers to server...');
         window.AlumniMailDB.createAlias(fullAlias, session.username, aliasPubJwk, encPrivateKey);
-        updateCryptoOverlayStep('db', 'completed', '✅ Custom address successfully active.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] Custom address successfully active.');
 
         setTimeout(() => {
             hideCryptoOverlay();
@@ -1936,7 +1987,7 @@ function renderKeysView() {
         tr.innerHTML = `
             <td><span class="font-mono">${uname}</span></td>
             <td>RSA-OAEP-2048</td>
-            <td><span class="status-icon verified">✅ Encrypt Key Active</span></td>
+            <td><span class="status-icon verified">[OK] Encrypt Key Active</span></td>
         `;
         tbody.appendChild(tr);
     });
@@ -1946,7 +1997,7 @@ function renderKeysView() {
         tr.innerHTML = `
             <td><span class="font-mono">${al.email}</span></td>
             <td>RSA-OAEP-2048</td>
-            <td><span class="status-icon verified">✅ Encrypt Key Active</span></td>
+            <td><span class="status-icon verified">[OK] Encrypt Key Active</span></td>
         `;
         tbody.appendChild(tr);
     });
@@ -1990,7 +2041,7 @@ function showCryptoOverlay() {
     steps.forEach(st => {
         const el = document.getElementById(`step-${st}`);
         el.className = "step";
-        el.querySelector('.step-status').innerText = "⏳";
+        el.querySelector('.step-status').innerText = "[..]";
     });
 }
 
@@ -2002,10 +2053,10 @@ function updateCryptoOverlayStep(stepId, state, text) {
     
     if (state === 'active') {
         el.className = "step active";
-        statusSpan.innerText = "🔄";
+        statusSpan.innerText = "[RUN]";
     } else if (state === 'completed') {
         el.className = "step completed";
-        statusSpan.innerText = "✅";
+        statusSpan.innerText = "[OK]";
     }
 }
 
@@ -2289,7 +2340,7 @@ function loadUserTier() {
     const badge = document.getElementById('user-tier-badge');
     if (badge) {
         if (tier === 'Pro') {
-            badge.innerText = "💎 PRO MEMBER";
+            badge.innerText = "PRO MEMBER";
             badge.style.background = "linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(0, 229, 255, 0.15) 100%)";
             badge.style.color = "gold";
             badge.style.borderColor = "gold";
@@ -2313,33 +2364,33 @@ async function submitFiatUpgrade() {
     successEl.classList.add('hidden');
     
     if (cardNum.length < 16) {
-        errorEl.innerText = "❌ Please enter a valid 16-digit credit card number.";
+        errorEl.innerText = "Please enter a valid 16-digit credit card number.";
         errorEl.classList.remove('hidden');
         return;
     }
     
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', '💳 Authorizing credit transaction with bank...');
+    updateCryptoOverlayStep('pbkdf2', 'active', '[..] Authorizing credit transaction with bank...');
     
     try {
         await new Promise(resolve => setTimeout(resolve, 800));
-        updateCryptoOverlayStep('rsa', 'active', '🔒 Syncing encrypted membership flags...');
+        updateCryptoOverlayStep('rsa', 'active', '[..] Syncing encrypted membership flags...');
         
         await window.AlumniMailDB.upgradeUserTier(session.username, 'Pro', 'fiat', { cardEnding: cardNum.slice(-4) });
         
-        updateCryptoOverlayStep('aes', 'completed', '✅ Credit payment approved.');
-        updateCryptoOverlayStep('db', 'completed', '✅ Local Database upgrade finalized.');
+        updateCryptoOverlayStep('aes', 'completed', '[OK] Credit payment approved.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] Local Database upgrade finalized.');
         
         setTimeout(() => {
             hideCryptoOverlay();
-            successEl.innerText = "🎉 Account upgraded successfully! Welcome to ALUMNI PRO.";
+            successEl.innerText = "Account upgraded successfully! Welcome to ALUMNI PRO.";
             successEl.classList.remove('hidden');
             loadUserTier();
             setTimeout(closeUpgradeModal, 1500);
         }, 800);
     } catch (e) {
         hideCryptoOverlay();
-        errorEl.innerText = "❌ Upgrade failed: " + e.message;
+        errorEl.innerText = "Upgrade failed: " + e.message;
         errorEl.classList.remove('hidden');
     }
 }
@@ -2356,7 +2407,7 @@ async function submitTokenUpgrade() {
     const walletPem = localStorage.getItem(`wallet_pem_${session.username}`);
     
     if (!walletTag || !walletPem) {
-        errorEl.innerText = "❌ No Alumni PEM Wallet connected. Please connect wallet first via the sidebar.";
+        errorEl.innerText = "No Alumni PEM Wallet connected. Please connect wallet first via the sidebar.";
         errorEl.classList.remove('hidden');
         return;
     }
@@ -2367,17 +2418,17 @@ async function submitTokenUpgrade() {
     const requiredAmount = billingCycle === 'monthly' ? 279 : 2660;
     
     if (currentBalance < requiredAmount) {
-        errorEl.innerText = `❌ Insufficient L1 Balance. Upgrade requires ${requiredAmount} ALUMNI. (Current: ${currentBalance})`;
+        errorEl.innerText = `Insufficient L1 Balance. Upgrade requires ${requiredAmount} ALUMNI. (Current: ${currentBalance})`;
         errorEl.classList.remove('hidden');
         return;
     }
     
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', `🪙 Initiating L1 Token subtraction: ${requiredAmount} ALUMNI...`);
+    updateCryptoOverlayStep('pbkdf2', 'active', `[..] Initiating L1 Token subtraction: ${requiredAmount} ALUMNI...`);
     
     try {
         await new Promise(resolve => setTimeout(resolve, 600));
-        updateCryptoOverlayStep('rsa', 'active', '✍️ Signing transaction payload locally with private PEM key...');
+        updateCryptoOverlayStep('rsa', 'active', '[..] Signing transaction payload locally with private PEM key...');
         
         // Generate mock transaction signature
         const txPayload = JSON.stringify({
@@ -2391,7 +2442,7 @@ async function submitTokenUpgrade() {
         window.crypto.getRandomValues(signatureBytes);
         const signatureHex = Array.from(signatureBytes).map(b => b.toString(16).padStart(2, '0')).join('');
         
-        updateCryptoOverlayStep('aes', 'active', '🚀 Broadcasting signed subscription payload to L1 RPC node...');
+        updateCryptoOverlayStep('aes', 'active', '[..] Broadcasting signed subscription payload to L1 RPC node...');
         
         // POST to blockchain relayer
         const res = await fetch('/api/v1/wallet/send', {
@@ -2414,7 +2465,7 @@ async function submitTokenUpgrade() {
         
         const txData = await res.json();
         
-        updateCryptoOverlayStep('db', 'completed', '✅ L1 Block confirmed.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] L1 Block confirmed.');
         
         await window.AlumniMailDB.upgradeUserTier(session.username, 'Pro', 'token', null, requiredAmount, txData.txHash);
         
@@ -2423,14 +2474,14 @@ async function submitTokenUpgrade() {
         
         setTimeout(() => {
             hideCryptoOverlay();
-            successEl.innerText = `🎉 Consensually verified on-chain! Upgraded to ALUMNI PRO. Tx: ${txData.txHash.substring(0, 12)}...`;
+            successEl.innerText = `Consensually verified on-chain! Upgraded to ALUMNI PRO. Tx: ${txData.txHash.substring(0, 12)}...`;
             successEl.classList.remove('hidden');
             loadUserTier();
             setTimeout(closeUpgradeModal, 2000);
         }, 1000);
     } catch (e) {
         hideCryptoOverlay();
-        errorEl.innerText = "❌ Blockchain consensus failed: " + e.message;
+        errorEl.innerText = "Blockchain consensus failed: " + e.message;
         errorEl.classList.remove('hidden');
     }
 }
@@ -2465,7 +2516,7 @@ function openAddMeetingModal() {
     // Check custom meeting scheduling limits for Free users
     const userMeetings = calendarMeetings.filter(m => m.username === session.username);
     if (session.userTier !== 'Pro' && userMeetings.length >= 1) {
-        alert("🔒 Free accounts are strictly limited to exactly 1 scheduled meeting. Please upgrade to Pro for unlimited zero-knowledge scheduling!");
+        alert("[SECURE] Free accounts are strictly limited to exactly 1 scheduled meeting. Please upgrade to Pro for unlimited zero-knowledge scheduling!");
         openUpgradeModal();
         return;
     }
@@ -2493,15 +2544,15 @@ async function handleSaveMeeting(event) {
     if (!title || !date || !time) return;
     
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', '🔑 Querying user local public key JWK...');
+    updateCryptoOverlayStep('pbkdf2', 'active', '[..] Querying user local public key JWK...');
     
     try {
         // Encrypt meeting elements locally using the user's own RSA key so only they can decrypt!
-        updateCryptoOverlayStep('rsa', 'active', '🔒 Encrypting meeting details with hybrid RSA-OAEP + AES-GCM...');
+        updateCryptoOverlayStep('rsa', 'active', '[..] Encrypting meeting details with hybrid RSA-OAEP + AES-GCM...');
         const encData = await window.AlumniMailCrypto.encryptEmail(title, desc, session.publicJwk);
         
-        updateCryptoOverlayStep('aes', 'completed', '✅ Details locally encrypted inside browser memory.');
-        updateCryptoOverlayStep('db', 'active', '📤 Registering encrypted agenda stream to node storage...');
+        updateCryptoOverlayStep('aes', 'completed', '[OK] Details locally encrypted inside browser memory.');
+        updateCryptoOverlayStep('db', 'active', '[..] Registering encrypted agenda stream to node storage...');
         
         const meetingObj = {
             id: window.AlumniMailCrypto.bufferToBase64(window.crypto.getRandomValues(new Uint8Array(16))),
@@ -2515,7 +2566,7 @@ async function handleSaveMeeting(event) {
         };
         
         await window.AlumniMailDB.saveMeeting(session.username, meetingObj);
-        updateCryptoOverlayStep('db', 'completed', '✅ Calendar transaction sync succeeded.');
+        updateCryptoOverlayStep('db', 'completed', '[OK] Calendar transaction sync succeeded.');
         
         setTimeout(async () => {
             hideCryptoOverlay();
@@ -2632,7 +2683,7 @@ async function renderAgenda(dayString) {
         lockedCard.style.cssText = "padding: 15px; text-align: center; border: 1px solid var(--accent-light); cursor: pointer; transition: all 0.2s;";
         lockedCard.onclick = openUpgradeModal;
         lockedCard.innerHTML = `
-            <div style="font-size: 1.1rem; margin-bottom: 5px;">🔒</div>
+            <div style="font-size: 1.1rem; margin-bottom: 5px;"><img src="assets/logo.png" class="logo-img" alt="Secure" style="height: 1.2em; width: auto; vertical-align: middle;"></div>
             <h4 style="margin:0 0 5px 0; font-size: 0.8rem; font-weight: 800; color: var(--accent-light);">E2EE Details Locked</h4>
             <p style="margin:0; font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
                 Zero-Knowledge agenda details are premium E2EE capabilities. Upgrade to PRO to view encrypted events.
@@ -2650,7 +2701,7 @@ async function renderAgenda(dayString) {
         
         const loader = document.createElement('div');
         loader.style.cssText = "font-size: 0.7rem; color: var(--text-muted); font-style: italic;";
-        loader.innerHTML = "🔓 Local RSA decryption stream active...";
+        loader.innerHTML = "[DECRYPT] Local RSA decryption stream active...";
         item.appendChild(loader);
         listEl.appendChild(item);
         
@@ -2662,16 +2713,16 @@ async function renderAgenda(dayString) {
             item.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
                     <h4 style="margin: 0; font-weight: 800; font-size: 0.85rem; color: var(--accent-light);">${decrypted.subject}</h4>
-                    <span style="font-size: 0.7rem; background: var(--border-color); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: 800;">⏰ ${m.time}</span>
+                    <span style="font-size: 0.7rem; background: var(--border-color); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: 800;">${m.time}</span>
                 </div>
                 <p style="margin: 0; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">${decrypted.body}</p>
                 <div style="margin-top: 8px; display: flex; align-items: center; gap: 4px; font-size: 0.6rem; color: var(--success-light); font-weight: 800; text-shadow: 0 0 6px rgba(16, 185, 129, 0.2);">
-                    🔑 Authenticated & Locally Decrypted (E2EE)
+                    [OK] Authenticated & Locally Decrypted (E2EE)
                 </div>
             `;
         } catch (err) {
             item.innerHTML = `
-                <h4 style="margin: 0 0 4px 0; font-size: 0.85rem; color: var(--accent-light);">⚠️ Decryption Error</h4>
+                <h4 style="margin: 0 0 4px 0; font-size: 0.85rem; color: var(--accent-light);">[ERROR] Decryption Error</h4>
                 <p style="margin: 0; font-size: 0.7rem; color: var(--text-muted);">Failed to decrypt securely with loaded private keys.</p>
             `;
         }

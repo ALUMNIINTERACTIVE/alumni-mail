@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alumni Mail | End-to-End Encrypted Privacy Ecosystem</title>
+    <meta name="description" content="Alumni Mail is a zero-knowledge, end-to-end encrypted (E2EE) privacy ecosystem offering secure emails, domains, aliases, and calendar schedules.">
+    <link rel="icon" type="image/png" href="assets/favicon.png">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,12 +17,12 @@
     <!-- INSECURE CONTEXT WARNING BANNER -->
     <div id="insecure-context-alert" class="hidden" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999; background: rgba(239, 68, 68, 0.15); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(239, 68, 68, 0.4); padding: 15px 25px; font-family: 'Inter', sans-serif; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); display: flex; justify-content: center;">
         <div style="max-width: 800px; width: 100%; display: flex; gap: 15px; align-items: flex-start; color: #ff8a8a; font-size: 0.9rem; line-height: 1.5;">
-            <span style="font-size: 1.8rem; line-height: 1;">⚠️</span>
+            <span style="font-size: 1.1rem; line-height: 1; font-weight: bold;">[ALERT]</span>
             <div style="flex: 1;">
                 <h4 style="margin: 0 0 5px 0; color: #ff5252; font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em;">Insecure Mobile Context Detected</h4>
                 <p style="margin: 0 0 10px 0;">End-to-End Encryption (E2EE) and WebAuthn Biometrics are <strong>completely disabled</strong> by your browser because this site is loaded over insecure HTTP (non-localhost IP: <code><span id="insecure-ip-display"></span></code>).</p>
                 <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 6px; font-size: 0.85rem; color: #e2e8f0; margin-top: 10px;">
-                    <p style="margin: 0 0 8px 0; font-weight: 600; color: #60a5fa;">💡 How to log in on your phone:</p>
+                    <p style="margin: 0 0 8px 0; font-weight: 600; color: #60a5fa;">How to log in on your phone:</p>
                     <ol style="margin: 0; padding-left: 20px;">
                         <li style="margin-bottom: 6px;"><strong>Use an HTTPS Tunnel (Recommended):</strong> Start a tunnel on your computer (e.g. run <code>npx localtunnel --port 8000</code> or <code>ngrok http 8000</code>) and open the secure <code>https://</code> link on your phone.</li>
                         <li style="margin-bottom: 6px;"><strong>iOS Simulator:</strong> Use the local iOS Simulator on this computer and open <code>http://localhost:8000</code> or <code>http://127.0.0.1:8000</code>.</li>
@@ -44,7 +46,7 @@
                 <div class="auth-header">
                     <div class="logo-container">
                         <div class="brand-logo">
-                            <span class="logo-lock">🔒</span>
+                            <span class="logo-lock"><img src="assets/logo.png" class="logo-img" alt="Logo"></span>
                         </div>
                         <span class="badge success">ZERO-KNOWLEDGE</span>
                     </div>
@@ -63,22 +65,20 @@
                         <label for="login-username">Email / Alumni ID</label>
                         <div class="input-wrapper">
                             <input type="text" id="login-username" class="input-field" placeholder="satoshi@alumnimail.app" required autocomplete="username">
-                            <span class="input-icon">👤</span>
                         </div>
                     </div>
                     <div class="form-group">
                         <label for="login-password">Secret Passphrase</label>
                         <div class="input-wrapper">
                             <input type="password" id="login-password" class="input-field" placeholder="••••••••••••••••" required autocomplete="current-password">
-                            <span class="input-icon">🔑</span>
                         </div>
                     </div>
                     <div class="form-actions" style="display: flex; gap: 10px;">
                         <button type="submit" class="btn primary glow" style="flex: 1;">
                             <span class="btn-text">Unlock Mailbox</span>
                         </button>
-                        <button type="button" id="btn-biometric-login" class="btn secondary glass-panel" style="width: 50px; min-width: 50px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;" title="Unlock with Biometrics (Face ID / Fingerprint)" onclick="handleBiometricLogin()">
-                            <span>🧬</span>
+                        <button type="button" id="btn-biometric-login" class="btn secondary glass-panel" style="width: 50px; min-width: 50px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold;" title="Unlock with Biometrics (Face ID / Fingerprint)" onclick="handleBiometricLogin()">
+                            <span>BIO</span>
                         </button>
                     </div>
                     <div id="login-error" class="auth-error-msg hidden"></div>
@@ -97,7 +97,6 @@
                         <label for="register-password">Create Secret Passphrase</label>
                         <div class="input-wrapper">
                             <input type="password" id="register-password" class="input-field" placeholder="Choose a highly secure passphrase" required autocomplete="new-password">
-                            <span class="input-icon">🔑</span>
                         </div>
                         <small class="helper-text">Your password never leaves this browser. Used to derive your keys locally.</small>
                     </div>
@@ -116,15 +115,15 @@
             <div class="overlay-card glass-panel">
                 <div class="spinner-container">
                     <div class="crypto-spinner"></div>
-                    <div class="spinner-icon">🔐</div>
+                    <div class="spinner-icon" style="font-size: 0.75rem; font-weight: bold;">SECURE</div>
                 </div>
-                <h3>Deploying Cryptographic Identity</h3>
+                <h2>Deploying Cryptographic Identity</h2>
                 <p id="crypto-status-text" class="subtitle">Deriving keys...</p>
                 <div class="crypto-steps">
-                    <div id="step-pbkdf2" class="step"><span class="step-status">⏳</span> PBKDF2 Password Derivation (10,000 iterations)</div>
-                    <div id="step-rsa" class="step"><span class="step-status">⏳</span> RSA-OAEP 2048-bit Key Pair Generation</div>
-                    <div id="step-aes" class="step"><span class="step-status">⏳</span> AES-GCM Encrypted Private Key Export</div>
-                    <div id="step-db" class="step"><span class="step-status">⏳</span> Transmitting Zero-Knowledge Profile to server</div>
+                    <div id="step-pbkdf2" class="step"><span class="step-status">[..]</span> PBKDF2 Password Derivation (10,000 iterations)</div>
+                    <div id="step-rsa" class="step"><span class="step-status">[..]</span> RSA-OAEP 2048-bit Key Pair Generation</div>
+                    <div id="step-aes" class="step"><span class="step-status">[..]</span> AES-GCM Encrypted Private Key Export</div>
+                    <div id="step-db" class="step"><span class="step-status">[..]</span> Transmitting Zero-Knowledge Profile to server</div>
                 </div>
             </div>
         </div>
@@ -140,8 +139,8 @@
                     <span class="hamburger-bar"></span>
                 </button>
                 <div class="mobile-brand">
-                    <span class="logo-glow">🔒</span>
-                    <h1>ALUMNI MAIL</h1>
+                    <span class="logo-glow"><img src="assets/logo.png" class="logo-img" alt="Logo"></span>
+                    <h2>ALUMNI MAIL</h2>
                 </div>
                 <div class="mobile-right">
                     <span class="badge success" style="font-size: 0.6rem; font-weight: 800; padding: 2px 6px;">E2EE</span>
@@ -154,15 +153,15 @@
             <!-- LEFT NAVIGATION SIDEBAR -->
             <aside class="sidebar glass-panel">
                 <div class="brand">
-                    <div class="logo-glow">🔒</div>
+                    <div class="logo-glow"><img src="assets/logo.png" class="logo-img" alt="Logo"></div>
                     <div>
-                        <h1>ALUMNI MAIL</h1>
+                        <h2>ALUMNI MAIL</h2>
                         <span class="badge success">E2EE ACTIVATED</span>
                     </div>
                 </div>
 
                 <div class="session-user-info">
-                    <div class="avatar">👤</div>
+                    <div class="avatar" style="font-size: 0.85rem; font-weight: bold; background: rgba(255,255,255,0.08); border-radius: 4px; padding: 2px 6px;">USER</div>
                     <div class="user-details" style="flex: 1;">
                         <span id="active-user-display" class="username">satoshi@alumnimail.app</span>
                         <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
@@ -178,7 +177,7 @@
                 <!-- ALUMNI L1 BLOCKCHAIN WALLET WIDGET -->
                 <div class="wallet-widget">
                     <div class="wallet-header">
-                        <span class="wallet-title">🔗 ALUMNI WALLET</span>
+                        <span class="wallet-title">ALUMNI WALLET</span>
                         <span id="wallet-status-badge" class="wallet-status disconnected">Disconnected</span>
                     </div>
                     <div id="wallet-linked-view" class="wallet-body hidden">
@@ -191,63 +190,63 @@
                             <span id="wallet-balance" class="wallet-value accent-green font-bold">0.00 ALUMNI</span>
                         </div>
                         <button id="wallet-connected-indicator" class="btn secondary-sm full-width" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: var(--success-light); font-weight: 800; pointer-events: none; margin-bottom: 8px; cursor: default;">
-                            ✓ Connected
+                            Connected
                         </button>
                         <div style="display: flex; gap: 8px; margin-top: 4px;">
-                            <button class="btn primary-sm glow" style="flex: 1; padding: 6px 8px;" onclick="openSendTokensModal()">⚡ Send ALUMNI</button>
-                            <button class="btn secondary-sm" style="flex: 0 0 35px; padding: 6px 0; text-align: center;" onclick="unlinkWallet()" title="Unlink Wallet">🔌</button>
+                            <button class="btn primary-sm glow" style="flex: 1; padding: 6px 8px;" onclick="openSendTokensModal()">Send ALUMNI</button>
+                            <button class="btn secondary-sm" style="flex: 0 0 35px; padding: 6px 0; text-align: center;" onclick="unlinkWallet()" title="Unlink Wallet">-</button>
                         </div>
                     </div>
                     <div id="wallet-unlinked-view" class="wallet-body text-center" style="padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
                         <p class="wallet-text-sm">Link your Alumni Wallet to show your verified tag and balance.</p>
                         <button class="btn primary-sm glow full-width" style="padding: 10px 12px; font-weight: 800; font-size: 0.8rem;" onclick="triggerWalletUpload()" id="wallet-connect-btn">
-                            ⚡ Link Alumni Wallet
+                            Link Alumni Wallet
                         </button>
                         <button class="btn secondary-sm full-width" style="padding: 10px 12px; font-weight: 800; font-size: 0.8rem; border: 1px solid rgba(239, 68, 68, 0.25); color: #f87171; background: rgba(239, 68, 68, 0.04); margin-top: 4px;" onclick="handleLogout()" id="wallet-logout-btn">
-                            🔓 Logout
+                            Logout
                         </button>
                     </div>
                 </div>
 
                 <button class="btn primary compose-btn glow" onclick="openComposer()">
-                    <span class="btn-icon">➕</span> Compose Secure Mail
+                    <span class="btn-icon"></span> Compose Secure Mail
                 </button>
 
                 <nav class="nav-links">
                     <ul>
                         <li id="nav-inbox" class="active" onclick="switchView('inbox')">
-                            <span class="nav-icon">📥</span> Inbox
+                            <span class="nav-icon"></span> Inbox
                             <span id="inbox-count" class="nav-badge hidden">0</span>
                         </li>
                         <li id="nav-sent" onclick="switchView('sent')">
-                            <span class="nav-icon">📤</span> Sent
+                            <span class="nav-icon"></span> Sent
                         </li>
                         <li id="nav-archive" onclick="switchView('archive')">
-                            <span class="nav-icon">📦</span> Archive
+                            <span class="nav-icon"></span> Archive
                         </li>
                         <li id="nav-trash" onclick="switchView('trash')">
-                            <span class="nav-icon">🗑️</span> Trash
+                            <span class="nav-icon"></span> Trash
                         </li>
                         <li id="nav-calendar" onclick="switchView('calendar')">
-                            <span class="nav-icon">📅</span> E2EE Calendar
+                            <span class="nav-icon"></span> E2EE Calendar
                         </li>
                         <li class="nav-divider">PRO FEATURES</li>
                         <li id="nav-domains" onclick="switchView('domains')">
-                            <span class="nav-icon">🌐</span> Custom Domains
+                            <span class="nav-icon"></span> Custom Domains
                             <span id="domain-count" class="badge-mini">0</span>
                         </li>
                         <li id="nav-keys" onclick="switchView('keys')">
-                            <span class="nav-icon">🔑</span> Key Manager
+                            <span class="nav-icon"></span> Key Manager
                         </li>
                         <li id="nav-settings" onclick="switchView('settings')">
-                            <span class="nav-icon">⚙️</span> Settings
+                            <span class="nav-icon"></span> Settings
                         </li>
                     </ul>
                 </nav>
 
                 <div class="sidebar-footer">
                     <button class="btn secondary full-width" onclick="handleLogout()">
-                        <span>🔓</span> Logout
+                        <span></span> Logout
                     </button>
                     <div class="system-node">
                         <span class="status-dot pulsing green"></span> Connected to Alumni Mail Node
@@ -267,14 +266,14 @@
                             <h2 id="view-title">Inbox</h2>
                             <div class="search-bar">
                                 <input type="text" id="mail-search" class="input-field" placeholder="Search decrypted headers..." onkeyup="filterEmails()">
-                                <span class="search-icon">🔍</span>
+                                <span class="search-icon"></span>
                             </div>
                         </div>
 
                         <div id="email-list" class="email-list-container">
                             <!-- Populated dynamically -->
                             <div class="empty-state-list">
-                                <span class="empty-icon">✉️</span>
+                                <span class="empty-icon"></span>
                                 <p>No encrypted messages found</p>
                             </div>
                         </div>
@@ -284,13 +283,13 @@
                     <section class="email-detail-pane glass-panel">
                         <!-- Empty Details State -->
                         <div id="email-detail-empty" class="detail-empty">
-                            <div class="secure-logo-glow">🔒</div>
+                            <div class="secure-logo-glow"><img src="assets/logo.png" class="secure-logo-img" alt="Secure Logo"></div>
                             <h3>Client-Side Cryptographic Decryption</h3>
                             <p class="subtitle text-center">Select an email to decrypt its contents in real-time. Decryption keys remain locally in your browser memory.</p>
                             <div class="crypto-badge-group">
-                                <span class="crypt-pill"><span class="pill-icon">🔒</span> AES-GCM-256</span>
-                                <span class="crypt-pill"><span class="pill-icon">🔑</span> RSA-OAEP-2048</span>
-                                <span class="crypt-pill"><span class="pill-icon">🛡️</span> PBKDF2</span>
+                                <span class="crypt-pill">AES-GCM-256</span>
+                                <span class="crypt-pill">RSA-OAEP-2048</span>
+                                <span class="crypt-pill">PBKDF2</span>
                             </div>
                         </div>
 
@@ -312,11 +311,14 @@
                                     </div>
                                 </div>
                                 <div class="detail-actions">
+                                    <button class="btn secondary" id="btn-reply" onclick="replyToActiveEmail()">
+                                        Reply
+                                    </button>
                                     <button class="btn secondary" id="btn-toggle-cipher" onclick="toggleCiphertext()">
-                                        👁️ View Ciphertext
+                                        View Ciphertext
                                     </button>
                                     <button class="btn secondary trash" onclick="deleteActiveEmail()">
-                                        🗑️ Delete
+                                        Delete
                                     </button>
                                 </div>
                             </div>
@@ -324,7 +326,7 @@
                             <div class="security-card glass-panel" id="security-badge-card">
                                 <div class="security-card-header">
                                     <span class="secure-indicator-dot secure"></span>
-                                    <span class="security-title" id="security-card-title">🔒 End-to-End Encrypted (E2EE)</span>
+                                    <span class="security-title" id="security-card-title">[SECURE] End-to-End Encrypted (E2EE)</span>
                                 </div>
                                 <p class="security-card-text" id="security-card-text">
                                     This message was encrypted on the sender's client and decrypted locally in your browser using your derived RSA private key. The server only sees base64 ciphertext.
@@ -358,7 +360,7 @@
                 <!-- VIEW B: CUSTOM DOMAINS MANAGER -->
                 <div id="view-domains" class="domains-workspace glass-panel view-section hidden">
                     <div class="view-header">
-                        <h2>🌐 Domain Hosting & Custom Email Aliases</h2>
+                        <h2>Domain Hosting & Custom Email Aliases</h2>
                         <p class="subtitle">Verify ownership of custom domains by configuring DNS records and create secure cryptographic aliases ending in your business name.</p>
                     </div>
 
@@ -389,7 +391,7 @@
                             <h3>DNS Verification Wizard</h3>
                             
                             <div id="dns-empty-state" class="dns-empty">
-                                <span class="dns-icon">🌐</span>
+                                <span class="dns-icon">Domain</span>
                                 <p>Select or add a domain on the left to begin verification and DNS records configuration.</p>
                             </div>
 
@@ -415,26 +417,26 @@
                                             <tr id="dns-row-mx">
                                                 <td><span class="record-badge mx">MX</span></td>
                                                 <td><span class="font-mono font-size-sm">@</span></td>
-                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('mail.alumnimail.app')">10 mail.alumnimail.app 📋</span></td>
-                                                <td><span class="status-icon" id="dns-status-mx">⏳ Pending</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('mail.alumnimail.app')">10 mail.alumnimail.app</span></td>
+                                                <td><span class="status-icon" id="dns-status-mx">[..] Pending</span></td>
                                             </tr>
                                             <tr id="dns-row-spf">
                                                 <td><span class="record-badge txt">TXT</span></td>
                                                 <td><span class="font-mono font-size-sm">@</span></td>
-                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=spf1 include:alumnimail.app ~all')">v=spf1 include:alumnimail.app ~all 📋</span></td>
-                                                <td><span class="status-icon" id="dns-status-spf">⏳ Pending</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=spf1 include:alumnimail.app ~all')">v=spf1 include:alumnimail.app ~all</span></td>
+                                                <td><span class="status-icon" id="dns-status-spf">[..] Pending</span></td>
                                             </tr>
                                             <tr id="dns-row-dkim">
                                                 <td><span class="record-badge txt">TXT</span></td>
                                                 <td><span class="font-mono font-size-sm">alumni._domainkey</span></td>
-                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQ...')">v=DKIM1; k=rsa; p=MIIB... 📋</span></td>
-                                                <td><span class="status-icon" id="dns-status-dkim">⏳ Pending</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQ...')">v=DKIM1; k=rsa; p=MIIB...</span></td>
+                                                <td><span class="status-icon" id="dns-status-dkim">[..] Pending</span></td>
                                             </tr>
                                             <tr id="dns-row-dmarc">
                                                 <td><span class="record-badge txt">TXT</span></td>
                                                 <td><span class="font-mono font-size-sm">_dmarc</span></td>
-                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=DMARC1; p=quarantine; pct=100;')">v=DMARC1; p=quarantine; pct=100; 📋</span></td>
-                                                <td><span class="status-icon" id="dns-status-dmarc">⏳ Pending</span></td>
+                                                <td><span class="font-mono font-size-sm copyable" onclick="copyText('v=DMARC1; p=quarantine; pct=100;')">v=DMARC1; p=quarantine; pct=100;</span></td>
+                                                <td><span class="status-icon" id="dns-status-dmarc">[..] Pending</span></td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -477,7 +479,7 @@
                 <!-- VIEW C: KEY MANAGER -->
                 <div id="view-keys" class="keys-workspace glass-panel view-section hidden">
                     <div class="view-header">
-                        <h2>🔑 Key Ring & Cryptographic Keys</h2>
+                        <h2>Key Ring & Cryptographic Keys</h2>
                         <p class="subtitle">Audit and export your locally derived keys. Remember: Alumni Mail is zero-knowledge. Your private keys never touch our servers in plain-text.</p>
                     </div>
 
@@ -529,11 +531,11 @@
                 <div id="view-calendar" class="calendar-workspace glass-panel view-section hidden">
                     <div class="view-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <div>
-                            <h2>📅 E2EE Encrypted Calendar</h2>
+                            <h2>E2EE Encrypted Calendar</h2>
                             <p class="subtitle">Your scheduled meetings are encrypted locally using your public key and stored as secure cipher streams.</p>
                         </div>
                         <button class="btn primary glow" onclick="openAddMeetingModal()">
-                            ➕ Schedule Meeting
+                            + Schedule Meeting
                         </button>
                     </div>
 
@@ -561,7 +563,7 @@
                         <!-- MEETING AGENDA LIST -->
                         <div class="calendar-agenda-card glass-panel" style="padding: 20px; display: flex; flex-direction: column; height: 100%; min-height: 380px;">
                             <h3 style="margin-top: 0; margin-bottom: 15px; font-weight: 800; font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                                🛡️ Agenda Details
+                                Agenda Details
                             </h3>
                             <div id="agenda-meetings-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
                                 <div class="text-center" style="color: var(--text-muted); margin-top: 20px; font-size: 0.85rem;">
@@ -576,13 +578,13 @@
                 <!-- VIEW D: SETTINGS -->
                 <div id="view-settings" class="settings-workspace glass-panel view-section hidden">
                     <div class="view-header">
-                        <h2>⚙️ Account Settings</h2>
+                        <h2>Account Settings</h2>
                         <p class="subtitle">Manage secure keys, themes, and configuration.</p>
                     </div>
 
                     <div class="settings-content">
                         <div class="settings-card glass-panel" style="margin-bottom: 20px;">
-                            <h3>🧬 Biometric Authentication</h3>
+                            <h3>Biometric Authentication</h3>
                             <p class="helper-text margin-b">Enable password-free login on this device using native biometric scanning (Face ID / Touch ID / Fingerprint). This securely links your local cryptographic vault to your device's hardware authenticator.</p>
                             
                             <div class="biometric-status-wrapper" style="margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; padding: 10px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px;">
@@ -591,7 +593,7 @@
                             </div>
 
                             <button id="btn-register-biometrics" class="btn primary glow" onclick="registerBiometrics()">
-                                🔑 Register Device Biometrics
+                                Register Device Biometrics
                             </button>
                         </div>
 
@@ -599,7 +601,7 @@
                             <h3>Security Tools</h3>
                             <p class="helper-text margin-b">For developer audits and troubleshooting, you can wipe the complete database clean, resetting all generated RSA keys and secure data.</p>
                             <button class="btn primary glow danger" onclick="nukeAndReset()">
-                                💥 Complete Database Nuke & Reset
+                                Complete Database Nuke & Reset
                             </button>
                         </div>
                     </div>
@@ -614,7 +616,7 @@
     <div id="composer-modal" class="modal-container hidden">
         <div class="composer-card glass-panel">
             <div class="composer-header">
-                <h3>✍️ New E2EE Message</h3>
+                <h3>New E2EE Message</h3>
                 <button class="close-composer-btn" onclick="closeComposer()">✕</button>
             </div>
             
@@ -639,7 +641,7 @@
                     <div class="composer-sec-row">
                         <span class="status-indicator-wrapper">
                             <span class="status-dot pulsing emerald" id="composer-sec-dot"></span>
-                            <span id="composer-sec-text" class="bold">🔒 Recipient E2EE Crypt Key Active</span>
+                            <span id="composer-sec-text" class="bold"><img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> Recipient E2EE Crypt Key Active</span>
                         </span>
                         <div class="sec-right-options">
                             <label class="switch-wrapper hidden" id="password-toggle-wrapper">
@@ -677,7 +679,7 @@
     <div id="external-reader-modal" class="modal-container hidden">
         <div class="external-reader-card glass-panel">
             <div class="reader-header">
-                <h3>🛡️ Alumni Interactive Encrypted Portal</h3>
+                <h3>Alumni Interactive Encrypted Portal</h3>
                 <button class="close-composer-btn" onclick="closeExternalReader()">✕</button>
             </div>
             
@@ -714,7 +716,7 @@
     <div id="wallet-modal" class="modal-container hidden">
         <div class="modal-card glass-panel" style="max-width: 440px;">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
-                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">🔗 Link Alumni L1 Wallet</h3>
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">Link Alumni L1 Wallet</h3>
                 <button class="close-composer-btn" onclick="closeWalletModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
             </div>
             
@@ -742,7 +744,7 @@
 
                 <div class="form-actions" style="margin-top: 5px;">
                     <button type="submit" class="btn primary glow full-width">
-                        <span>⚡ Link Wallet</span>
+                        <span>Link Wallet</span>
                     </button>
                 </div>
             </form>
@@ -753,7 +755,7 @@
     <div id="send-tokens-modal" class="modal-container hidden">
         <div class="modal-card glass-panel" style="max-width: 440px;">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
-                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">💸 Send ALUMNI Tokens</h3>
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">Send ALUMNI Tokens</h3>
                 <button class="close-composer-btn" onclick="closeSendTokensModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
             </div>
             
@@ -775,7 +777,7 @@
                 <div class="form-group">
                     <label>Transaction Signing Certificate</label>
                     <div style="background: rgba(0, 0, 0, 0.3); padding: 12px; border-radius: 8px; font-size: 0.75rem; border: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 1.4rem;">🔏</span>
+                        <span style="font-weight: bold; color: var(--success-light);">[SECURE]</span>
                         <div style="display: flex; flex-direction: column; gap: 2px;">
                             <span style="color: var(--success-light); font-weight: 800; font-size: 0.75rem;">secp256k1 Key Active</span>
                             <span style="color: var(--text-dark); font-size: 0.65rem; line-height: 1.2;">Transaction signed locally in your client's browser sandbox.</span>
@@ -788,7 +790,7 @@
 
                 <div class="form-actions" style="margin-top: 5px;">
                     <button type="submit" class="btn primary glow full-width">
-                        <span>🚀 Broadcast L1 Transaction</span>
+                        <span>Broadcast L1 Transaction</span>
                     </button>
                 </div>
             </form>
@@ -800,7 +802,7 @@
         <div class="modal-card glass-panel" style="max-width: 580px; width: 100%; border: 1px solid var(--accent-light); box-shadow: 0 0 30px rgba(0, 229, 255, 0.15);">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
                 <h3 style="margin: 0; font-weight: 800; color: var(--accent-light); font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
-                    💎 Upgrade to ALUMNI PRO
+                    Upgrade to ALUMNI PRO
                 </h3>
                 <button class="btn-icon-close" onclick="closeUpgradeModal()">✕</button>
             </div>
@@ -844,22 +846,22 @@
                                 <span id="pro-period-display" style="font-size: 0.75rem; color: var(--text-muted);">/ month</span>
                             </div>
                             <span id="alumni-promo-badge" style="font-size: 0.7rem; color: var(--success-light); font-weight: 800; text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);">
-                                💥 Get 30% Off First Year with ALUMNI!
+                                Get 30% Off First Year with ALUMNI!
                             </span>
                         </div>
                         <ul style="padding-left: 15px; margin: 0; font-size: 0.75rem; display: flex; flex-direction: column; gap: 8px;">
                             <li><strong>Unlimited</strong> Custom Domains</li>
                             <li><strong>Unlimited</strong> Custom Domain Aliases</li>
-                            <li>👑 Premium E2EE Calendar access</li>
-                            <li>🚀 High-speed Validator RPC priority</li>
-                            <li>🔒 Upgraded 10GB Secure Storage</li>
+                            <li>Premium E2EE Calendar access</li>
+                            <li>High-speed Validator RPC priority</li>
+                            <li><img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> Upgraded 10GB Secure Storage</li>
                         </ul>
                     </div>
                     <div style="margin-top: 15px;">
                         <!-- Payment Method Toggle -->
                         <div class="payment-method-selector" style="display: flex; gap: 6px; margin-bottom: 8px;">
-                            <button id="pay-method-fiat" class="btn secondary-sm flex-1 font-bold active" onclick="setPaymentMethod('fiat')" style="padding: 4px 6px; font-size: 0.7rem;">💳 Credit Card</button>
-                            <button id="pay-method-token" class="btn secondary-sm flex-1 font-bold" onclick="setPaymentMethod('token')" style="padding: 4px 6px; font-size: 0.7rem;">🪙 ALUMNI Token</button>
+                            <button id="pay-method-fiat" class="btn secondary-sm flex-1 font-bold active" onclick="setPaymentMethod('fiat')" style="padding: 4px 6px; font-size: 0.7rem;">Credit Card</button>
+                            <button id="pay-method-token" class="btn secondary-sm flex-1 font-bold" onclick="setPaymentMethod('token')" style="padding: 4px 6px; font-size: 0.7rem;">ALUMNI Token</button>
                         </div>
                         
                         <div id="fiat-payment-form" style="display: flex; flex-direction: column; gap: 6px;">
@@ -872,7 +874,7 @@
                                 <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">L1 Total Payable (30% Off):</span>
                                 <span id="token-payable-display" class="accent-green font-bold font-mono" style="font-size: 1.1rem;">279 ALUMNI</span>
                             </div>
-                            <button class="btn primary-sm glow full-width" onclick="submitTokenUpgrade()">🚀 Authorize L1 Token Payment</button>
+                            <button class="btn primary-sm glow full-width" onclick="submitTokenUpgrade()">Authorize L1 Token Payment</button>
                         </div>
                     </div>
                 </div>
@@ -888,7 +890,7 @@
         <div class="modal-card glass-panel" style="max-width: 440px; width: 100%;">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
                 <h3 style="margin: 0; font-weight: 800; color: var(--accent-light); font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
-                    🛡️ Schedule Encrypted Meeting
+                    Schedule Encrypted Meeting
                 </h3>
                 <button class="btn-icon-close" onclick="closeAddMeetingModal()">✕</button>
             </div>
@@ -913,12 +915,12 @@
                 </div>
                 
                 <div class="alert warning" style="margin: 0; font-size: 0.75rem; padding: 8px 10px;">
-                    🔐 <strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.
+                    <img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> <strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.
                 </div>
 
                 <div class="form-actions" style="margin-top: 10px;">
                     <button type="submit" class="btn primary glow full-width">
-                        <span>💾 Save Secure Event</span>
+                        <span>Save Secure Event</span>
                     </button>
                 </div>
             </form>
@@ -930,7 +932,7 @@
         <div class="auditor-header" onclick="toggleAuditorDrawer()">
             <div class="auditor-header-title">
                 <span class="auditor-pulse"></span>
-                <span>🛡️ Zero-Knowledge Security Auditor & Logs</span>
+                <span>Zero-Knowledge Security Auditor & Logs</span>
             </div>
             <div class="auditor-header-actions">
                 <button id="btn-toggle-auditor" class="btn-icon-auditor">▲ Expand Console</button>
@@ -938,9 +940,9 @@
         </div>
 
         <div class="auditor-tabs">
-            <button class="auditor-tab-btn active" onclick="switchAuditorTab('db')">📂 Database Inspector (Live)</button>
-            <button class="auditor-tab-btn" onclick="switchAuditorTab('network')">🌐 Mock API Request Logger</button>
-            <button class="auditor-tab-btn" onclick="switchAuditorTab('memory')">🧠 Local Browser Key State</button>
+            <button class="auditor-tab-btn active" onclick="switchAuditorTab('db')">Database Inspector (Live)</button>
+            <button class="auditor-tab-btn" onclick="switchAuditorTab('network')">Mock API Request Logger</button>
+            <button class="auditor-tab-btn" onclick="switchAuditorTab('memory')">Local Browser Key State</button>
         </div>
 
         <div class="auditor-body">
@@ -972,17 +974,17 @@
                 <p class="helper-text margin-b">This panel lists cryptographic secrets strictly housed in active browser JS variable memory. Once the tab is closed, these values vanish completely, satisfying the Zero-Knowledge paradigm.</p>
                 <div class="memory-grid">
                     <div class="memory-box glass-panel">
-                        <h4>🔑 Session Key Decryption Key (KDK)</h4>
+                        <h4>Session Key Decryption Key (KDK)</h4>
                         <div class="font-mono value-label" id="mem-kdk-val">Key locked. Please log in.</div>
                         <small class="helper-text">Derived locally from your password using PBKDF2. Never leaves your browser.</small>
                     </div>
                     <div class="memory-box glass-panel">
-                        <h4>🔒 Unlocked RSA-OAEP Private Key</h4>
+                        <h4><img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> Unlocked RSA-OAEP Private Key</h4>
                         <div class="font-mono value-label" id="mem-privkey-val">Key locked. Please log in.</div>
                         <small class="helper-text">Used to decrypt session keys of incoming E2EE messages. Restored in-memory only.</small>
                     </div>
                     <div class="memory-box glass-panel">
-                        <h4>🌐 Verified Custom Domains Registry</h4>
+                        <h4>Verified Custom Domains Registry</h4>
                         <div class="font-mono value-label" id="mem-domains-val">No custom domains verified.</div>
                         <small class="helper-text">Bound aliases will encrypt using their corresponding specific RSA keys.</small>
                     </div>
