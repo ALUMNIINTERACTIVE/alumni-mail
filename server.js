@@ -238,6 +238,7 @@ app.post('/api/auth/register', (req, res) => {
         publicJwk,
         encPrivateKey,
         tier: resolvedTier,
+        virtualNumber: isBypass ? '+18449521385' : null,
         registeredAt: Date.now(),
         webauthnCredentials: []
     };
@@ -291,6 +292,13 @@ app.post('/api/auth/login', (req, res) => {
     const prefix = normUser.split('@')[0].toLowerCase();
     const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
     const resolvedTier = isBypass ? 'Ultimate' : (user.tier || 'Free');
+
+    // Auto-assign virtual number to bypass profiles if missing
+    if (isBypass && !user.virtualNumber) {
+        user.virtualNumber = '+18449521385';
+        user.tier = 'Ultimate';
+        saveDB(db);
+    }
 
     res.json({
         success: true,
@@ -1333,11 +1341,7 @@ app.post('/api/v1/twilio/provision-number', async (req, res) => {
         return res.status(404).json({ error: "User profile not found." });
     }
 
-    // Premium Check
-    const isBypass = ['satoshi', 'dev', 'nycole'].includes(normUser.split('@')[0]);
-    if (user.tier !== 'Ultimate' && !isBypass) {
-        return res.status(403).json({ error: "Virtual numbers are exclusive to the Ultimate tier." });
-    }
+    // Virtual number provisioning is available to all users
 
     // Live Mode
     if (twilioClient) {
