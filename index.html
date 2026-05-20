@@ -34,7 +34,7 @@
     </div>
 
     <!-- Background decorative grids -->
-    <div class="bg-glow bg-glow-blue"></div>
+    <div class="bg-glow bg-glow-monochrome"></div>
     <div class="bg-glow bg-glow-emerald"></div>
 
     <!-- MAIN APP WRAPPER -->
@@ -282,16 +282,7 @@
                     <!-- EMAIL VIEW PANE -->
                     <section class="email-detail-pane glass-panel">
                         <!-- Empty Details State -->
-                        <div id="email-detail-empty" class="detail-empty">
-                            <div class="secure-logo-glow"><img src="assets/logo.png" class="secure-logo-img" alt="Secure Logo"></div>
-                            <h3>Client-Side Cryptographic Decryption</h3>
-                            <p class="subtitle text-center">Select an email to decrypt its contents in real-time. Decryption keys remain locally in your browser memory.</p>
-                            <div class="crypto-badge-group">
-                                <span class="crypt-pill">AES-GCM-256</span>
-                                <span class="crypt-pill">RSA-OAEP-2048</span>
-                                <span class="crypt-pill">PBKDF2</span>
-                            </div>
-                        </div>
+                        <div id="email-detail-empty" class="detail-empty"></div>
 
                         <!-- Active Mail View -->
                         <div id="email-detail-active" class="detail-active hidden">
@@ -641,7 +632,7 @@
                     <div class="composer-sec-row">
                         <span class="status-indicator-wrapper">
                             <span class="status-dot pulsing emerald" id="composer-sec-dot"></span>
-                            <span id="composer-sec-text" class="bold"><img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> Recipient E2EE Crypt Key Active</span>
+                            <span id="composer-sec-text" class="bold"><img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> Recipient E2EE Crypt Key Active</span>
                         </span>
                         <div class="sec-right-options">
                             <label class="switch-wrapper hidden" id="password-toggle-wrapper">
@@ -854,7 +845,7 @@
                             <li><strong>Unlimited</strong> Custom Domain Aliases</li>
                             <li>Premium E2EE Calendar access</li>
                             <li>High-speed Validator RPC priority</li>
-                            <li><img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> Upgraded 10GB Secure Storage</li>
+                            <li><img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> Upgraded 10GB Secure Storage</li>
                         </ul>
                     </div>
                     <div style="margin-top: 15px;">
@@ -915,7 +906,7 @@
                 </div>
                 
                 <div class="alert warning" style="margin: 0; font-size: 0.75rem; padding: 8px 10px;">
-                    <img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> <strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.
+                    <img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> <strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.
                 </div>
 
                 <div class="form-actions" style="margin-top: 10px;">
@@ -979,7 +970,7 @@
                         <small class="helper-text">Derived locally from your password using PBKDF2. Never leaves your browser.</small>
                     </div>
                     <div class="memory-box glass-panel">
-                        <h4><img src="assets/logo.png" class="logo-img" alt="Secure Logo" style="vertical-align: middle; height: 1.1em; width: auto; margin-right: 4px;"> Unlocked RSA-OAEP Private Key</h4>
+                        <h4><img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> Unlocked RSA-OAEP Private Key</h4>
                         <div class="font-mono value-label" id="mem-privkey-val">Key locked. Please log in.</div>
                         <small class="helper-text">Used to decrypt session keys of incoming E2EE messages. Restored in-memory only.</small>
                     </div>

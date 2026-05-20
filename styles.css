@@ -4,29 +4,29 @@
  */
 
 :root {
-    --bg-base: #060913;
-    --bg-card: rgba(15, 23, 42, 0.5);
-    --bg-panel: rgba(13, 20, 35, 0.75);
+    --bg-base: #000000;
+    --bg-card: rgba(18, 18, 18, 0.6);
+    --bg-panel: rgba(10, 10, 10, 0.85);
     --border-color: rgba(255, 255, 255, 0.08);
-    --border-glow: rgba(59, 130, 246, 0.25);
+    --border-glow: rgba(255, 255, 255, 0.15);
     
-    --text-main: #f1f5f9;
-    --text-muted: #94a3b8;
-    --text-dark: #64748b;
+    --text-main: #f5f5f7;
+    --text-muted: #a1a1a6;
+    --text-dark: #6e6e73;
     
-    --accent: #2563eb;
-    --accent-glow: rgba(37, 99, 235, 0.5);
-    --accent-light: #60a5fa;
+    --accent: #ffffff;
+    --accent-glow: rgba(255, 255, 255, 0.2);
+    --accent-light: #f5f5f7;
     
     --success: #10b981;
-    --success-glow: rgba(16, 185, 129, 0.4);
+    --success-glow: rgba(16, 185, 129, 0.25);
     --success-light: #34d399;
     
     --warning: #f59e0b;
-    --warning-glow: rgba(245, 158, 11, 0.4);
+    --warning-glow: rgba(245, 158, 11, 0.2);
     
-    --danger: #f43f5e;
-    --danger-glow: rgba(244, 63, 94, 0.4);
+    --danger: #ff453a;
+    --danger-glow: rgba(255, 69, 58, 0.25);
     
     --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
@@ -77,15 +77,15 @@ body {
     pointer-events: none;
 }
 
-.bg-glow-blue {
-    background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+.bg-glow-monochrome {
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
     top: -10%;
     left: -10%;
     animation: floatingGlow 15s infinite alternate;
 }
 
 .bg-glow-emerald {
-    background: radial-gradient(circle, var(--success) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.05) 0%, transparent 70%);
     bottom: -10%;
     right: -10%;
     animation: floatingGlow 18s infinite alternate-reverse;
@@ -200,10 +200,10 @@ body {
 }
 .btn.primary {
     background: var(--accent);
-    color: #ffffff;
+    color: #000000;
 }
 .btn.primary:hover {
-    background: #1d4ed8;
+    background: #cbd5e1;
     transform: translateY(-1px);
 }
 .btn.primary.glow:hover {
@@ -222,7 +222,7 @@ body {
     color: white;
 }
 .btn.danger:hover {
-    background: #be123c;
+    background: #e03b30;
     box-shadow: 0 0 15px var(--danger-glow);
 }
 .btn.full-width { width: 100%; }
@@ -303,34 +303,43 @@ body {
     gap: 12px;
 }
 .brand-logo {
-    width: 60px;
-    height: 60px;
-    background: radial-gradient(circle, var(--accent) 0%, rgba(0,0,0,0.5) 100%);
-    border: 2px solid var(--border-glow);
+    width: 44px;
+    height: 44px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, rgba(0,0,0,0.6) 100%);
+    border: 1px solid var(--border-glow);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 20px var(--accent-glow);
+    box-shadow: 0 0 15px var(--accent-glow);
 }
 .brand-logo .logo-img {
-    width: 36px;
-    height: 36px;
+    width: 24px;
+    height: 24px;
     object-fit: contain;
 }
 .logo-img {
+    max-width: 24px;
+    max-height: 24px;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+.logo-img-inline {
+    vertical-align: middle;
+    height: 1.1em;
+    width: 1.1em;
+    object-fit: contain;
+    margin-right: 4px;
+    display: inline-block;
+}
+.secure-logo-img {
     width: 32px;
     height: 32px;
     object-fit: contain;
-}
-.secure-logo-img {
-    width: 44px;
-    height: 44px;
-    object-fit: contain;
-    filter: drop-shadow(0 0 8px var(--success-light));
+    filter: drop-shadow(0 0 6px var(--success-light));
 }
 .logo-lock {
-    font-size: 1.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -537,9 +546,9 @@ body {
     justify-content: center;
 }
 .logo-glow .logo-img {
-    width: 24px;
-    height: 24px;
-    filter: drop-shadow(0 0 4px var(--accent-light));
+    width: 20px;
+    height: 20px;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.25));
 }
 
 .session-user-info {
@@ -613,9 +622,9 @@ body {
     color: var(--text-main);
 }
 .nav-links li.active {
-    background: rgba(37, 99, 235, 0.1);
+    background: rgba(255, 255, 255, 0.08);
     color: var(--accent-light);
-    border-color: rgba(37, 99, 235, 0.2);
+    border-color: rgba(255, 255, 255, 0.15);
 }
 .nav-badge {
     position: absolute;
@@ -761,8 +770,8 @@ body {
     border-color: rgba(255,255,255,0.15);
 }
 .email-card.active {
-    background: rgba(37, 99, 235, 0.08);
-    border-color: rgba(37, 99, 235, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 .email-card.unread {
     border-left: 3px solid var(--accent-light);
@@ -819,17 +828,19 @@ body {
     gap: 15px;
     text-align: center;
 }
+.detail-empty:empty {
+    display: none !important;
+}
 .secure-logo-glow {
-    font-size: 2.5rem;
-    width: 80px;
-    height: 80px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%);
+    width: 64px;
+    height: 64px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
     border-radius: 50%;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    border: 1px solid rgba(16, 185, 129, 0.25);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 20px var(--success-glow);
+    box-shadow: 0 0 15px var(--success-glow);
     animation: pulseGlow 2s infinite alternate;
 }
 @keyframes pulseGlow {
@@ -1025,8 +1036,8 @@ body {
     border-color: rgba(255,255,255,0.12);
 }
 .active-domains-list li.active {
-    background: rgba(37, 99, 235, 0.08);
-    border-color: rgba(37, 99, 235, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 .active-domains-list .empty-li {
     border: none;
@@ -1083,7 +1094,7 @@ body {
     font-weight: bold;
     font-size: 0.65rem;
 }
-.record-badge.mx { background: rgba(37, 99, 235, 0.15); color: var(--accent-light); }
+.record-badge.mx { background: rgba(255, 255, 255, 0.12); color: var(--accent-light); }
 .record-badge.txt { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
 .copyable {
     cursor: pointer;
@@ -1767,8 +1778,8 @@ body {
     transition: all 0.3s ease;
 }
 .wallet-widget:hover {
-    border-color: rgba(37, 99, 235, 0.3);
-    box-shadow: 0 4px 25px rgba(37, 99, 235, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 25px rgba(255, 255, 255, 0.08);
 }
 .wallet-header {
     display: flex;
@@ -1834,10 +1845,10 @@ body {
     padding: 6px 12px;
     font-size: 0.75rem;
     background: var(--accent);
-    color: white;
+    color: #000000;
 }
 .primary-sm:hover {
-    background: #1d4ed8;
+    background: #cbd5e1;
     box-shadow: 0 0 10px var(--accent-glow);
 }
 .secondary-sm {
@@ -1875,7 +1886,7 @@ body {
 }
 .drag-drop-area:hover {
     border-color: var(--accent-light);
-    background: rgba(37, 99, 235, 0.05);
+    background: rgba(255, 255, 255, 0.04);
     color: var(--text-main);
 }
 .drag-drop-area.dragover {
