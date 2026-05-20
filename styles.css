@@ -1578,7 +1578,7 @@ body {
         border-bottom: 1px solid var(--border-color);
         position: sticky;
         top: 0;
-        z-index: 90;
+        z-index: 160; /* Raised above backdrop (140) and sidebar (150) to keep menu button visible and clickable */
         flex-shrink: 0;
     }
     
@@ -1588,16 +1588,19 @@ body {
         cursor: pointer;
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
-        width: 22px;
-        height: 16px;
+        justify-content: center;
+        align-items: center;
+        gap: 5px;
+        width: 44px; /* Increased to 44px for perfect mobile accessibility tap target */
+        height: 44px;
         padding: 0;
-        z-index: 160;
+        z-index: 170;
+        margin-left: -11px; /* Align visually with header bounds */
     }
     
     .hamburger-bar {
         display: block;
-        width: 100%;
+        width: 22px;
         height: 2px;
         background: var(--text-main);
         border-radius: 2px;
@@ -1636,13 +1639,13 @@ body {
     
     .sidebar {
         position: fixed;
-        top: 0;
+        top: 60px; /* Offset completely by mobile header */
         left: 0;
         width: 280px;
-        height: 100vh;
+        height: calc(100vh - 60px); /* Fill remaining viewport */
         z-index: 150;
         transform: translateX(-100%);
-        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         border-right: 1px solid var(--border-color);
         box-shadow: 10px 0 30px rgba(0, 0, 0, 0.6);
         background: rgba(6, 9, 19, 0.96);
@@ -1650,30 +1653,38 @@ body {
         overflow-y: auto;
         border-radius: 0;
         padding: 20px;
+        visibility: hidden; /* Hide completely when closed to prevent touch interception */
     }
     
     .sidebar.open {
         transform: translateX(0);
+        visibility: visible;
+    }
+    
+    .sidebar .brand {
+        display: none; /* Redundant on mobile header layout */
     }
     
     .sidebar-backdrop {
         display: block;
         position: fixed;
-        top: 0;
+        top: 60px; /* Offset completely by mobile header */
         left: 0;
         width: 100vw;
-        height: 100vh;
+        height: calc(100vh - 60px); /* Fill remaining viewport */
         background: rgba(2, 4, 9, 0.7);
         backdrop-filter: blur(4px);
         z-index: 140;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.3s ease;
+        visibility: hidden; /* Hide completely when inactive to prevent touch/render interference */
+        transition: opacity 0.3s ease, visibility 0.3s ease;
     }
     
     .sidebar-backdrop.active {
         opacity: 1;
         pointer-events: auto;
+        visibility: visible;
     }
     
     .main-content {

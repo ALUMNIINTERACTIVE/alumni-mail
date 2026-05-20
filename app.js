@@ -309,7 +309,7 @@ async function registerBiometrics() {
             "raw",
             bioKeyBytes,
             { name: "AES-GCM" },
-            false,
+            true,
             ["encrypt", "decrypt"]
         );
 
@@ -465,7 +465,7 @@ async function handleBiometricLogin() {
             "raw",
             bioKeyBytes,
             { name: "AES-GCM" },
-            false,
+            true,
             ["encrypt", "decrypt"]
         );
 
