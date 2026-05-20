@@ -27,6 +27,42 @@ app.use('/api', (req, res, next) => {
     next();
 });
 
+// -------------------------------------------------------------
+// STATIC FILE SECURITY MIDDLEWARE
+// Block access to sensitive backend files BEFORE the static handler.
+// Only serve explicit frontend assets (HTML, CSS, client JS, images).
+// -------------------------------------------------------------
+const BLOCKED_FILES = new Set([
+    '/server.js', '/db.js', '/crypto.js',
+    '/server_db.json', '/.env', '/.gitignore',
+    '/package.json', '/package-lock.json',
+    '/_headers', '/_redirects'
+]);
+const BLOCKED_PREFIXES = ['/node_modules', '/.git', '/blockchain-temp'];
+
+app.use((req, res, next) => {
+    const urlPath = decodeURIComponent(req.path).toLowerCase();
+
+    // Block exact file matches
+    if (BLOCKED_FILES.has(urlPath)) {
+        return res.status(404).send('Not Found');
+    }
+
+    // Block directory prefixes
+    for (const prefix of BLOCKED_PREFIXES) {
+        if (urlPath.startsWith(prefix)) {
+            return res.status(404).send('Not Found');
+        }
+    }
+
+    // Block dotfiles (except well-known)
+    if (urlPath.startsWith('/.') && !urlPath.startsWith('/.well-known')) {
+        return res.status(404).send('Not Found');
+    }
+
+    next();
+});
+
 // Serve Static Frontend Assets from root folder
 app.use(express.static(path.join(__dirname)));
 
