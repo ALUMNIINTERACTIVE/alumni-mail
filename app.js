@@ -835,10 +835,21 @@ function seedInboxGreeting(username, recipientPublicJwk) {
     const welcomeExists = emails.some(e => e.sender === 'hal@alumnimail.app');
     
     if (!welcomeExists) {
-        // We trigger an E2EE message sent from hal@alumnimail.app to Satoshi
+        // We trigger an E2EE message sent from hal@alumnimail.app to the new user
         setTimeout(async () => {
+            let displayName = "Satoshi";
+            if (username) {
+                const localPart = username.split('@')[0];
+                if (localPart) {
+                    displayName = localPart
+                        .split(/[\._-]/)
+                        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                        .join(' ');
+                }
+            }
+
             const subject = "Welcome to Alumni Mail!";
-            const body = `Hello Satoshi,
+            const body = `Hello ${displayName},
 
 Welcome to the custom end-to-end encrypted Alumni Mail network.
 
@@ -851,7 +862,7 @@ Feel free to create a custom domain, bind it, verify DNS records, deploy custom 
 Best,
 Hal`;
             
-            // Encrypt using Satoshi's public key
+            // Encrypt using the user's public key
             const encData = await window.AlumniMailCrypto.encryptEmail(subject, body, recipientPublicJwk);
             
             window.AlumniMailDB.sendEmail({
