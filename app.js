@@ -46,8 +46,15 @@ async function seedRecipientRegistry() {
 // APP INITIALIZATION
 // -------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
-    // Check if secure context
-    const isSecure = window.isSecureContext && window.crypto && window.crypto.subtle;
+    // Check if secure context — accounts for Cloudflare Flexible SSL and .app HSTS preload.
+    // The .app TLD is HSTS-preloaded, so all browsers enforce HTTPS automatically.
+    // Cloudflare terminates TLS and forwards to the origin over HTTP, but the browser
+    // still sees https:// — so window.isSecureContext should be true.
+    const proto = window.location.protocol;
+    const host = window.location.hostname;
+    const isLocalhost = (host === 'localhost' || host === '127.0.0.1' || host === '::1');
+    const isHTTPS = (proto === 'https:');
+    const isSecure = isHTTPS || isLocalhost || (window.isSecureContext === true);
     if (!isSecure) {
         const alertEl = document.getElementById('insecure-context-alert');
         if (alertEl) {
