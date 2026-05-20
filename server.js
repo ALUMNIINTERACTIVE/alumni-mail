@@ -12,6 +12,7 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 8000;
 
 app.use(cors());
@@ -224,6 +225,15 @@ function base64urlToBuffer(str) {
     return Buffer.from(b64, 'base64');
 }
 
+// Helper to resolve clean Relying Party ID for WebAuthn (strips ports, works behind proxies)
+function getRpId(req) {
+    let host = req.hostname || "localhost";
+    if (host.includes(":")) {
+        host = host.split(":")[0];
+    }
+    return host;
+}
+
 app.get('/api/auth/webauthn/register-options', (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -237,9 +247,10 @@ app.get('/api/auth/webauthn/register-options', (req, res) => {
 
     auditLog("WEBAUTHN", `Generated register options challenge for ${normUser}`);
 
+    const rpId = getRpId(req);
     res.json({
         challenge,
-        rp: { id: req.hostname, name: "Alumni Mail" },
+        rp: { id: rpId, name: "Alumni Mail" },
         user: {
             id: Buffer.from(normUser).toString('base64url'),
             name: normUser,
@@ -287,7 +298,7 @@ app.get('/api/auth/webauthn/login-options', (req, res) => {
 
     const responseOptions = {
         challenge,
-        rpId: req.hostname,
+        rpId: getRpId(req),
         userVerification: "preferred"
     };
 
@@ -760,9 +771,14 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
     // SIMULATION FALLBACK (Robust demo mode when offline or L1 URL is unset)
     let simulatedBalance = 2500;
     try {
+        const keyOrAddress = req.body.keyOrAddress || "";
+        let seedString = tag;
+        if (keyOrAddress && keyOrAddress !== "READ_ONLY") {
+            seedString = keyOrAddress;
+        }
         let numericHash = 0;
-        for (let i = 0; i < tag.length; i++) {
-            numericHash += tag.charCodeAt(i);
+        for (let i = 0; i < seedString.length; i++) {
+            numericHash += seedString.charCodeAt(i);
         }
         simulatedBalance = (numericHash * 23) % 25000 + 100;
     } catch (e) {}

@@ -701,7 +701,7 @@
             
             <form id="wallet-link-form" onsubmit="handleRegisterWallet(event)" class="auth-form active" style="display: flex; flex-direction: column; gap: 15px;">
                 <p class="subtitle" style="font-size: 0.75rem; line-height: 1.4; color: var(--text-dark); margin: 0;">
-                    Enter your Elliptic Curve (secp256k1) Private Key and custom registered Tag/Alias to link your Alumni L1 Wallet directly to your email identity.
+                    Enter your Public Key, Address, or Elliptic Curve (secp256k1) Private Key, along with a custom Tag/Alias, to link your Alumni L1 Wallet directly to your email identity.
                 </p>
                 
                 <div class="form-group">
@@ -714,9 +714,9 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="wallet-key-input">secp256k1 Private Key (PEM format or Hex string)</label>
-                    <textarea id="wallet-key-input" class="input-field" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----&#10;or raw Hex private key string" required style="resize: vertical; font-family: monospace; font-size: 0.75rem; min-height: 120px; line-height: 1.4; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 12px;"></textarea>
-                    <small class="helper-text" style="color: var(--text-dark); font-size: 0.7rem; margin-top: 4px;">Paste your private key. All operations are local and client-side only.</small>
+                    <label for="wallet-key-input">Alumni L1 Public Key, Address, or Private Key (Optional)</label>
+                    <textarea id="wallet-key-input" class="input-field" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----&#10;or raw Hex private key string,&#10;or standard watch-only Address / Public Key&#10;(Optional: Leave blank to connect in Read-Only view)" style="resize: vertical; font-family: monospace; font-size: 0.75rem; min-height: 120px; line-height: 1.4; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 12px;"></textarea>
+                    <small class="helper-text" style="color: var(--text-dark); font-size: 0.7rem; margin-top: 4px;">Provide a Public Key or Address for safe Watch-Only balance tracking. Enter a Private Key only if you want to authorize outgoing sends.</small>
                 </div>
 
                 <div id="wallet-link-error" class="auth-error-msg hidden"></div>

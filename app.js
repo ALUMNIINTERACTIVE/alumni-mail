@@ -918,23 +918,23 @@ async function handleRegisterWallet(event) {
     const tagInput = document.getElementById('wallet-tag-input').value.trim();
     const keyInput = document.getElementById('wallet-key-input').value.trim();
     
-    if (!keyInput) {
-        document.getElementById('wallet-link-error').innerText = "Please enter your private key.";
-        document.getElementById('wallet-link-error').classList.remove('hidden');
-        return;
-    }
-
-    // Basic format validation: check if it looks like a PEM format or a valid 64-char Hex private key
-    const cleanKey = keyInput.replace(/\r/g, '').trim();
-    const isHex = /^[0-9a-fA-F]{64}$/.test(cleanKey);
-    const isPem = cleanKey.includes("-----BEGIN PRIVATE KEY-----") || 
-                  cleanKey.includes("-----BEGIN EC PRIVATE KEY-----") ||
-                  cleanKey.includes("-----BEGIN RSA PRIVATE KEY-----");
-    
-    if (!isHex && !isPem) {
-        document.getElementById('wallet-link-error').innerText = "Invalid key format! Please paste a valid secp256k1 private key in PEM format or 64-character Hex string.";
-        document.getElementById('wallet-link-error').classList.remove('hidden');
-        return;
+    let cleanKey = "";
+    if (keyInput) {
+        cleanKey = keyInput.replace(/\r/g, '').trim();
+        const isHex = /^(0x)?[0-9a-fA-F]{40,130}$/.test(cleanKey);
+        const isPem = cleanKey.includes("-----BEGIN PRIVATE KEY-----") || 
+                      cleanKey.includes("-----BEGIN EC PRIVATE KEY-----") ||
+                      cleanKey.includes("-----BEGIN RSA PRIVATE KEY-----") ||
+                      cleanKey.includes("-----BEGIN PUBLIC KEY-----");
+        const isAddress = /^[a-zA-Z0-9_-]{30,80}$/.test(cleanKey);
+        
+        if (!isHex && !isPem && !isAddress) {
+            document.getElementById('wallet-link-error').innerText = "Invalid format! Please enter a valid Public Key, Address, or secp256k1 Private Key.";
+            document.getElementById('wallet-link-error').classList.remove('hidden');
+            return;
+        }
+    } else {
+        cleanKey = "READ_ONLY";
     }
 
     // Clean and validate: convert to uppercase and strip non-alphanumeric chars
@@ -944,7 +944,8 @@ async function handleRegisterWallet(event) {
     localStorage.setItem(`wallet_pem_${session.username}`, cleanKey);
     
     if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
-        window.AlumniMailDB.auditLog("L1 LINK", `Linked Alumni Wallet to email ${session.username} with tag ${cleanTag}.`);
+        const linkType = cleanKey === "READ_ONLY" ? "READ_ONLY" : "FULL_ACCESS";
+        window.AlumniMailDB.auditLog("L1 LINK", `Linked Alumni Wallet to email ${session.username} with tag ${cleanTag} (${linkType} mode).`);
     }
 
     await updateWalletBalance(cleanTag);
@@ -965,14 +966,16 @@ async function updateWalletBalance(tag) {
     }
 
     try {
+        const walletPem = localStorage.getItem(`wallet_pem_${session.username}`) || "";
+
         if (typeof logNetworkRequest === "function") {
-            logNetworkRequest("POST", "/api/v1/wallet/balance", { tag: tag, email: session.username });
+            logNetworkRequest("POST", "/api/v1/wallet/balance", { tag: tag, email: session.username, keyOrAddress: walletPem });
         }
 
         const response = await fetch(`/api/v1/wallet/balance`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tag: tag, email: session.username })
+            body: JSON.stringify({ tag: tag, email: session.username, keyOrAddress: walletPem })
         });
         const data = await response.json();
 
@@ -1891,8 +1894,8 @@ function renderKeysView() {
     tbody.innerHTML = '';
 
     // Load active registered users + custom aliases from database
-    const usersObj = JSON.parse(localStorage.getItem('alumni_mail_users'));
-    const aliasesArr = JSON.parse(localStorage.getItem('alumni_mail_aliases'));
+    const usersObj = JSON.parse(localStorage.getItem('alumni_mail_users') || '{}');
+    const aliasesArr = JSON.parse(localStorage.getItem('alumni_mail_aliases') || '[]');
 
     Object.keys(usersObj).forEach(uname => {
         const tr = document.createElement('tr');
@@ -2034,6 +2037,11 @@ function logDBQuery({ timestamp, action, sqlQuery, rawData }) {
         container.appendChild(sub);
     }
 
+    // Keep log container capped at 150 entries to prevent memory leak and rendering lag
+    while (container.childNodes.length > 200) {
+        container.removeChild(container.firstChild);
+    }
+
     container.scrollTop = container.scrollHeight;
 }
 
@@ -2053,10 +2061,17 @@ function logNetworkRequest(method, endpoint, payload) {
     `;
     container.appendChild(line);
 
-    const sub = document.createElement('div');
-    sub.className = "log-line payload-info";
-    sub.innerText = `└─ Payload Body: ${JSON.stringify(payload, null, 2)}`;
-    container.appendChild(sub);
+    if (payload) {
+        const sub = document.createElement('div');
+        sub.className = "log-line payload-info";
+        sub.innerText = `└─ Payload Body: ${JSON.stringify(payload, null, 2)}`;
+        container.appendChild(sub);
+    }
+
+    // Keep log container capped at 150 entries to prevent memory leak and rendering lag
+    while (container.childNodes.length > 200) {
+        container.removeChild(container.firstChild);
+    }
 
     container.scrollTop = container.scrollHeight;
 }
@@ -2313,7 +2328,7 @@ async function submitTokenUpgrade() {
     }
     
     // Check balance
-    const balanceText = document.getElementById('wallet-balance-display').innerText;
+    const balanceText = document.getElementById('wallet-balance').innerText;
     const currentBalance = parseFloat(balanceText.replace(/[^\d.]/g, '')) || 0;
     const requiredAmount = billingCycle === 'monthly' ? 279 : 2660;
     

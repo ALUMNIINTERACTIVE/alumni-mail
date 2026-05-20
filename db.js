@@ -18,6 +18,7 @@ class MockDatabase {
     constructor() {
         this.listeners = [];
         this.logListeners = [];
+        this.seenLogs = new Set();
         
         // Local state cache
         this.cache = {
@@ -34,10 +35,11 @@ class MockDatabase {
         // Bootstrapping: fetch initial server state
         this.syncWithServer();
 
-        // 1-second long poll for reactive real-time logs and updates
-        setInterval(() => {
+        // Safe self-scheduling loop for reactive real-time logs and updates
+        this._isSyncingLogs = false;
+        setTimeout(() => {
             this.syncLogs();
-        }, 1200);
+        }, 1500);
     }
 
     async syncWithServer() {
@@ -47,8 +49,12 @@ class MockDatabase {
             if (logsRes.ok) {
                 const data = await logsRes.json();
                 this.cache.logs = data.logs;
-                // Emit raw log lines to listeners on first fetch
-                data.logs.forEach(log => this.emitLog(log));
+                // Emit raw log lines to listeners on first fetch and store signatures
+                data.logs.forEach(log => {
+                    const signature = `${log.timestamp}|${log.action}|${log.sqlQuery}|${typeof log.rawData === 'object' ? JSON.stringify(log.rawData) : log.rawData}`;
+                    this.seenLogs.add(signature);
+                    this.emitLog(log);
+                });
             }
         } catch (e) {
             console.warn("Server offline or loading initial state.", e.message);
@@ -56,11 +62,28 @@ class MockDatabase {
     }
 
     async syncLogs() {
+        if (this._isSyncingLogs) return;
+        this._isSyncingLogs = true;
         try {
             const res = await fetch(`${this.apiBase}/api/logs`);
             if (res.ok) {
                 const data = await res.json();
-                const newLogs = data.logs.slice(this.cache.logs.length);
+                const newLogs = [];
+                for (const log of data.logs) {
+                    const signature = `${log.timestamp}|${log.action}|${log.sqlQuery}|${typeof log.rawData === 'object' ? JSON.stringify(log.rawData) : log.rawData}`;
+                    if (!this.seenLogs.has(signature)) {
+                        this.seenLogs.add(signature);
+                        newLogs.push(log);
+                    }
+                }
+
+                // Capping the seenLogs Set to prevent memory growth
+                if (this.seenLogs.size > 500) {
+                    const keys = Array.from(this.seenLogs.keys());
+                    const toRemove = keys.slice(0, 200);
+                    toRemove.forEach(k => this.seenLogs.delete(k));
+                }
+
                 if (newLogs.length > 0) {
                     this.cache.logs = data.logs;
                     newLogs.forEach(log => this.emitLog(log));
@@ -68,6 +91,10 @@ class MockDatabase {
             }
         } catch (e) {
             // Suppress errors to avoid cluttering browser developer console
+        } finally {
+            this._isSyncingLogs = false;
+            // Schedule the next poll safely 1.5s after this one finishes
+            setTimeout(() => this.syncLogs(), 1500);
         }
     }
 
