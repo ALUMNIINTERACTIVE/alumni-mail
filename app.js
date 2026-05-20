@@ -349,7 +349,7 @@ async function handleBiometricLogin() {
 
     if (linkedAccounts.length === 0) {
         if (errorEl) {
-            errorEl.innerText = "No biometric credentials have been registered on this device yet. Please log in with your passphrase first, go to Settings, and link this device.";
+            errorEl.innerText = "No biometric credentials have been registered on this device yet. Because your E2EE vault is zero-knowledge and completely secure, you must first log in with your secret passphrase on this device to import your credentials, then navigate to Settings and click 'Register Device Biometrics' to unlock it password-free here in the future.";
             errorEl.classList.remove('hidden');
         }
         return;

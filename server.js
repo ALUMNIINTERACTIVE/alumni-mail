@@ -735,6 +735,41 @@ app.post('/api/mail/delete/:emailId', (req, res) => {
     res.json({ success: true });
 });
 
+// Helper: derive a stable, unique public address or SPKI DER hash from a PEM private key,
+// PEM public key, or standard wallet address so that simulated balances are perfectly identical.
+function deriveNormalizedAddress(keyOrAddress) {
+    if (!keyOrAddress || keyOrAddress === "READ_ONLY") {
+        return "";
+    }
+    
+    const crypto = require('crypto');
+    const clean = keyOrAddress.trim();
+    
+    // 1. If it looks like a PEM key (begins with -----BEGIN)
+    if (clean.startsWith("-----BEGIN")) {
+        try {
+            // Is it a private key?
+            if (clean.includes("PRIVATE KEY")) {
+                const privateKey = crypto.createPrivateKey(clean);
+                const publicKey = crypto.createPublicKey(privateKey);
+                const spki = publicKey.export({ type: 'spki', format: 'der' });
+                return crypto.createHash('sha256').update(spki).digest('hex');
+            } else {
+                // It is a public key
+                const publicKey = crypto.createPublicKey(clean);
+                const spki = publicKey.export({ type: 'spki', format: 'der' });
+                return crypto.createHash('sha256').update(spki).digest('hex');
+            }
+        } catch (err) {
+            console.warn("[DERIVE NORMALIZED] Failed to parse PEM key, falling back to raw hash:", err.message);
+            return crypto.createHash('sha256').update(clean).digest('hex');
+        }
+    }
+    
+    // 2. Otherwise (raw address, tag, or hex string), hash it directly to keep it stable
+    return crypto.createHash('sha256').update(clean).digest('hex');
+}
+
 app.post('/api/v1/wallet/balance', async (req, res) => {
     const { tag, email } = req.body;
     if (!tag) {
@@ -774,7 +809,7 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
         const keyOrAddress = req.body.keyOrAddress || "";
         let seedString = tag;
         if (keyOrAddress && keyOrAddress !== "READ_ONLY") {
-            seedString = keyOrAddress;
+            seedString = deriveNormalizedAddress(keyOrAddress);
         }
         let numericHash = 0;
         for (let i = 0; i < seedString.length; i++) {
@@ -793,6 +828,7 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
         l1_status: "OFFLINE_SIMULATION"
     });
 });
+
 
 app.post('/api/v1/wallet/send', async (req, res) => {
     const fromEmail = req.body.fromEmail;
