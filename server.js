@@ -33,7 +33,7 @@ app.use('/api', (req, res, next) => {
 // Only serve explicit frontend assets (HTML, CSS, client JS, images).
 // -------------------------------------------------------------
 const BLOCKED_FILES = new Set([
-    '/server.js', '/db.js', '/crypto.js',
+    '/server.js',
     '/server_db.json', '/.env', '/.gitignore',
     '/package.json', '/package-lock.json',
     '/_headers', '/_redirects'
