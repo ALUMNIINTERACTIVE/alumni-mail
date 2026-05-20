@@ -580,13 +580,27 @@ async function handleRegister(event) {
     }
 
     // Check if user exists on server
+    // IMPORTANT: We must validate the response is real JSON with a salt field.
+    // Cloudflare can serve cached HTML (200 OK) for GET routes, which would
+    // make checkRes.ok = true and falsely block ALL registrations.
     try {
         const checkRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/salt/${encodeURIComponent(fullUsername)}`);
         if (checkRes.ok) {
-            errorEl.innerText = "This address is already registered.";
-            errorEl.classList.remove('hidden');
-            return;
+            try {
+                const checkData = await checkRes.json();
+                // Only block if the response is genuine JSON with a salt field
+                if (checkData && checkData.salt) {
+                    errorEl.innerText = "This address is already registered.";
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                // Got 200 OK but no valid salt (e.g. Cloudflare HTML) — allow registration to continue
+            } catch (jsonErr) {
+                // Response was not valid JSON (e.g. cached HTML from Cloudflare) — allow registration
+                console.warn("Salt check returned non-JSON response, proceeding with registration.");
+            }
         }
+        // 404 = user doesn't exist yet, safe to register
     } catch (e) {
         // Network/other error, continue to try registering
     }
@@ -682,17 +696,28 @@ async function handleLogin(event) {
 
     try {
         // Step 1: Retrieve user salt from server
+        // IMPORTANT: Validate response is real JSON — Cloudflare can return cached
+        // HTML (200 OK) instead of the JSON salt, which would cause a silent parse crash.
         let salt;
         try {
             const saltRes = await fetch(`${window.AlumniMailDB.apiBase}/api/auth/salt/${encodeURIComponent(fullUsername)}`);
             if (!saltRes.ok) {
                 throw new Error("User profile not found.");
             }
-            const saltData = await saltRes.json();
+            let saltData;
+            try {
+                saltData = await saltRes.json();
+            } catch (parseErr) {
+                // Got HTML instead of JSON — Cloudflare caching issue
+                throw new Error("Server returned an unexpected response. The CDN cache may be stale. Please try again in a moment.");
+            }
+            if (!saltData || !saltData.salt) {
+                throw new Error("User profile not found.");
+            }
             salt = saltData.salt;
         } catch (err) {
             hideCryptoOverlay();
-            errorEl.innerText = "Authentication failed. User profile not found.";
+            errorEl.innerText = "Authentication failed: " + err.message;
             errorEl.classList.remove('hidden');
             return;
         }
