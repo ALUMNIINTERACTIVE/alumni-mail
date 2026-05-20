@@ -88,6 +88,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4. Clear any stale elements
     clearAuditorLogs('db');
     clearAuditorLogs('network');
+
+    // 5. Check Stripe Checkout success / cancel query params on load
+    checkStripeCheckoutRedirect();
+
+    // 6. Interactive Atmospheric 3D Parallax on Auth Logo
+    document.addEventListener('mousemove', (e) => {
+        const x = (e.clientX / window.innerWidth) * 20;
+        const y = (e.clientY / window.innerHeight) * 20;
+        const logo = document.querySelector('.logo-img');
+        if (logo) {
+            logo.style.transform = `translate(${x}px, ${y}px) rotateX(${y}deg) rotateY(${x}deg)`;
+        }
+    });
 });
 
 function renderActiveViewData() {
@@ -896,6 +909,9 @@ function enterMailbox() {
     renderDomainsCount();
     loadLinkedWallet();
     loadUserTier();
+    
+    // Connect WebRTC signaling socket
+    initSignalingSocket();
 }
 
 function handleLogout() {
@@ -2257,8 +2273,25 @@ function copyText(text) {
 // -------------------------------------------------------------
 // SECTION 8: PRO UPGRADE & SUBSCRIPTION BILLING CYCLE FLOWS
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// SECTION 8: PRO UPGRADE & SUBSCRIPTION BILLING CYCLE FLOWS
+// -------------------------------------------------------------
 let billingCycle = 'yearly';
 let paymentMethod = 'fiat';
+let selectedTier = 'Pro';
+
+// WebRTC Calling State variables
+let signalingSocket = null;
+let peerConnection = null;
+let localStream = null;
+let screenStream = null;
+let isMicMuted = false;
+let isCamOff = false;
+let isScreenSharing = false;
+let currentCallPeer = null;
+let currentCallType = null;
+let pendingOffer = null;
+let pendingCaller = null;
 
 function openUpgradeModal() {
     document.getElementById('upgrade-modal').classList.add('active');
@@ -2266,14 +2299,40 @@ function openUpgradeModal() {
     document.getElementById('upgrade-error').classList.add('hidden');
     document.getElementById('upgrade-success').classList.add('hidden');
     
-    // Default billing cycle is yearly, default payment is fiat
-    setBillingCycle('yearly');
-    setPaymentMethod('fiat');
+    // Select active tier by default, otherwise default to Pro
+    const activeTier = session.userTier && session.userTier !== 'Free' ? session.userTier : 'Pro';
+    selectPricingCard(activeTier);
+    
+    setBillingCycle(billingCycle);
+    setPaymentMethod(paymentMethod);
 }
 
 function closeUpgradeModal() {
     document.getElementById('upgrade-modal').classList.remove('active');
     document.getElementById('upgrade-modal').classList.add('hidden');
+}
+
+function selectPricingCard(tier) {
+    if (tier === 'Free') return; // Cannot select Free to upgrade
+    selectedTier = tier;
+    
+    const cardPro = document.getElementById('card-tier-pro');
+    const cardEnt = document.getElementById('card-tier-enterprise');
+    const cardUlt = document.getElementById('card-tier-ultimate');
+    
+    if (cardPro) cardPro.classList.remove('selected');
+    if (cardEnt) cardEnt.classList.remove('selected');
+    if (cardUlt) cardUlt.classList.remove('selected');
+    
+    if (tier === 'Pro' && cardPro) {
+        cardPro.classList.add('selected');
+    } else if (tier === 'Enterprise' && cardEnt) {
+        cardEnt.classList.add('selected');
+    } else if (tier === 'Ultimate' && cardUlt) {
+        cardUlt.classList.add('selected');
+    }
+    
+    updateBillingPrices();
 }
 
 function setBillingCycle(cycle) {
@@ -2282,14 +2341,16 @@ function setBillingCycle(cycle) {
     const labelMonthly = document.getElementById('label-billing-monthly');
     const labelYearly = document.getElementById('label-billing-yearly');
     
-    if (cycle === 'monthly') {
-        knob.style.left = '2px';
-        labelMonthly.style.color = 'var(--accent-light)';
-        labelYearly.style.color = 'var(--text-color)';
-    } else {
-        knob.style.left = '24px';
-        labelMonthly.style.color = 'var(--text-color)';
-        labelYearly.style.color = 'var(--accent-light)';
+    if (knob) {
+        if (cycle === 'monthly') {
+            knob.style.left = '2px';
+            if (labelMonthly) labelMonthly.style.color = 'var(--accent-light)';
+            if (labelYearly) labelYearly.style.color = 'var(--text-color)';
+        } else {
+            knob.style.left = '24px';
+            if (labelMonthly) labelMonthly.style.color = 'var(--text-color)';
+            if (labelYearly) labelYearly.style.color = 'var(--accent-light)';
+        }
     }
     
     updateBillingPrices();
@@ -2304,21 +2365,47 @@ function toggleBillingCycle() {
 }
 
 function updateBillingPrices() {
-    const priceDisplay = document.getElementById('pro-price-display');
-    const periodDisplay = document.getElementById('pro-period-display');
+    const proPrice = document.getElementById('pro-price-display');
+    const proPeriod = document.getElementById('pro-period-display');
+    const entPrice = document.getElementById('ent-price-display');
+    const entPeriod = document.getElementById('ent-period-display');
+    const ultPrice = document.getElementById('ult-price-display');
+    const ultPeriod = document.getElementById('ult-period-display');
+    
+    const summaryTitle = document.getElementById('payment-summary-title');
+    const summaryDesc = document.getElementById('payment-summary-desc');
     const tokenDisplay = document.getElementById('token-payable-display');
     
-    if (billingCycle === 'monthly') {
-        priceDisplay.innerText = "$3.99";
-        periodDisplay.innerText = "/ month";
-        // 30% Off First Year: $3.99 * 0.70 = $2.79 = 279 ALUMNI
-        tokenDisplay.innerText = "279 ALUMNI";
-    } else {
-        // Yearly saves 20%: $3.16/mo * 12 = $38.00 / year
-        priceDisplay.innerText = "$38.00";
-        periodDisplay.innerText = "/ year";
-        // 30% Off First Year: $38.00 * 0.70 = $26.60 = 2660 ALUMNI
-        tokenDisplay.innerText = "2660 ALUMNI";
+    const prices = {
+        'Pro': { 'monthly': 3.99, 'yearly': 38.00, 'monthlyToken': 279, 'yearlyToken': 2660 },
+        'Enterprise': { 'monthly': 15.00, 'yearly': 144.00, 'monthlyToken': 1050, 'yearlyToken': 10080 },
+        'Ultimate': { 'monthly': 9.99, 'yearly': 96.00, 'monthlyToken': 699, 'yearlyToken': 6720 }
+    };
+    
+    const periodText = billingCycle === 'monthly' ? '/ month' : '/ year';
+    
+    if (proPrice && proPeriod) {
+        proPrice.innerText = billingCycle === 'monthly' ? "$3.99" : "$38.00";
+        proPeriod.innerText = periodText;
+    }
+    if (entPrice && entPeriod) {
+        entPrice.innerText = billingCycle === 'monthly' ? "$15.00" : "$144.00";
+        entPeriod.innerText = periodText;
+    }
+    if (ultPrice && ultPeriod) {
+        ultPrice.innerText = billingCycle === 'monthly' ? "$9.99" : "$96.00";
+        ultPeriod.innerText = periodText;
+    }
+    
+    if (summaryTitle && summaryDesc) {
+        summaryTitle.innerText = `Selected Tier: ALUMNI ${selectedTier}`;
+        const activePrice = prices[selectedTier][billingCycle];
+        summaryDesc.innerText = `Price: $${activePrice.toFixed(2)} ${periodText}`;
+    }
+    
+    if (tokenDisplay) {
+        const tokenVal = prices[selectedTier][billingCycle === 'monthly' ? 'monthlyToken' : 'yearlyToken'];
+        tokenDisplay.innerText = `${tokenVal} ALUMNI`;
     }
 }
 
@@ -2329,16 +2416,18 @@ function setPaymentMethod(method) {
     const formFiat = document.getElementById('fiat-payment-form');
     const formToken = document.getElementById('token-payment-form');
     
-    if (method === 'fiat') {
-        btnFiat.classList.add('active');
-        btnToken.classList.remove('active');
-        formFiat.classList.remove('hidden');
-        formToken.classList.add('hidden');
-    } else {
-        btnFiat.classList.remove('active');
-        btnToken.classList.add('active');
-        formFiat.classList.add('hidden');
-        formToken.classList.remove('hidden');
+    if (btnFiat && btnToken && formFiat && formToken) {
+        if (method === 'fiat') {
+            btnFiat.classList.add('active');
+            btnToken.classList.remove('active');
+            formFiat.classList.remove('hidden');
+            formToken.classList.add('hidden');
+        } else {
+            btnFiat.classList.remove('active');
+            btnToken.classList.add('active');
+            formFiat.classList.add('hidden');
+            formToken.classList.remove('hidden');
+        }
     }
 }
 
@@ -2347,12 +2436,25 @@ function loadUserTier() {
     session.userTier = tier;
     const badge = document.getElementById('user-tier-badge');
     if (badge) {
-        if (tier === 'Pro') {
+        badge.innerText = `${tier.toUpperCase()} TIER`;
+        if (tier === 'Ultimate') {
+            badge.innerText = "ULTIMATE E2EE";
+            badge.style.background = "rgba(16, 185, 129, 0.15)";
+            badge.style.color = "#10b981";
+            badge.style.borderColor = "#10b981";
+            badge.style.boxShadow = "0 0 10px rgba(16, 185, 129, 0.3)";
+        } else if (tier === 'Enterprise') {
+            badge.innerText = "ENTERPRISE MEMBER";
+            badge.style.background = "rgba(148, 163, 184, 0.15)";
+            badge.style.color = "#94a3b8";
+            badge.style.borderColor = "#94a3b8";
+            badge.style.boxShadow = "0 0 10px rgba(148, 163, 184, 0.3)";
+        } else if (tier === 'Pro') {
             badge.innerText = "PRO MEMBER";
-            badge.style.background = "linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(0, 229, 255, 0.15) 100%)";
-            badge.style.color = "gold";
-            badge.style.borderColor = "gold";
-            badge.style.boxShadow = "0 0 10px rgba(255, 215, 0, 0.3)";
+            badge.style.background = "rgba(255, 255, 255, 0.1)";
+            badge.style.color = "#ffffff";
+            badge.style.borderColor = "#ffffff";
+            badge.style.boxShadow = "0 0 10px rgba(255, 255, 255, 0.2)";
         } else {
             badge.innerText = "FREE TIER";
             badge.style.background = "rgba(255, 255, 255, 0.06)";
@@ -2364,42 +2466,102 @@ function loadUserTier() {
 }
 
 async function submitFiatUpgrade() {
-    const cardNum = document.getElementById('upgrade-card-number').value.trim();
     const errorEl = document.getElementById('upgrade-error');
     const successEl = document.getElementById('upgrade-success');
     
     errorEl.classList.add('hidden');
     successEl.classList.add('hidden');
     
-    if (cardNum.length < 16) {
-        errorEl.innerText = "Please enter a valid 16-digit credit card number.";
-        errorEl.classList.remove('hidden');
-        return;
-    }
-    
     showCryptoOverlay();
-    updateCryptoOverlayStep('pbkdf2', 'active', '[..] Authorizing credit transaction with bank...');
+    updateCryptoOverlayStep('pbkdf2', 'active', '[..] Generating secure Stripe checkout session...');
     
     try {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        updateCryptoOverlayStep('rsa', 'active', '[..] Syncing encrypted membership flags...');
+        const res = await fetch('/api/v1/subscription/create-checkout-session', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: session.username,
+                tier: selectedTier,
+                billingCycle: billingCycle
+            })
+        });
         
-        await window.AlumniMailDB.upgradeUserTier(session.username, 'Pro', 'fiat', { cardEnding: cardNum.slice(-4) });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || "Failed to initiate Stripe session.");
+        }
         
-        updateCryptoOverlayStep('aes', 'completed', '[OK] Credit payment approved.');
-        updateCryptoOverlayStep('db', 'completed', '[OK] Local Database upgrade finalized.');
+        const data = await res.json();
+        updateCryptoOverlayStep('rsa', 'active', '[..] Establishing secure redirect tunnel...');
         
         setTimeout(() => {
             hideCryptoOverlay();
-            successEl.innerText = "Account upgraded successfully! Welcome to ALUMNI PRO.";
-            successEl.classList.remove('hidden');
-            loadUserTier();
-            setTimeout(closeUpgradeModal, 1500);
+            window.location.href = data.url;
         }, 800);
     } catch (e) {
         hideCryptoOverlay();
-        errorEl.innerText = "Upgrade failed: " + e.message;
+        errorEl.innerText = "Checkout failed: " + e.message;
         errorEl.classList.remove('hidden');
+    }
+}
+
+async function checkStripeCheckoutRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const isSuccess = params.get('stripe_checkout_success');
+    const isCancel = params.get('stripe_checkout_cancel');
+    const sessionId = params.get('session_id');
+    const paramUser = params.get('username');
+    const paramTier = params.get('tier');
+    
+    if (isCancel === 'true') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        alert("[SECURE] Stripe premium subscription checkout was cancelled.");
+        return;
+    }
+    
+    if (isSuccess === 'true' && sessionId && paramUser && paramTier) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        showCryptoOverlay();
+        updateCryptoOverlayStep('pbkdf2', 'active', `[..] Verifying Stripe payment session: ${sessionId.substring(0, 15)}...`);
+        
+        try {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            updateCryptoOverlayStep('rsa', 'active', `[..] Authenticating zero-knowledge database upgrade for ${paramUser}...`);
+            
+            const res = await fetch('/api/v1/subscription/upgrade', {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: paramUser,
+                    tier: paramTier,
+                    paymentMethod: 'fiat',
+                    cardDetails: { sessionId: sessionId }
+                })
+            });
+            
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Upgrade transaction verification rejected.");
+            }
+            
+            updateCryptoOverlayStep('aes', 'completed', '[OK] Stripe subscription consensus verified.');
+            updateCryptoOverlayStep('db', 'completed', `[OK] Upgraded profile to ALUMNI ${paramTier.toUpperCase()}.`);
+            
+            localStorage.setItem(`user_tier_${paramUser}`, paramTier);
+            if (session.username && session.username.toLowerCase() === paramUser.toLowerCase()) {
+                session.userTier = paramTier;
+                loadUserTier();
+            }
+            
+            setTimeout(() => {
+                hideCryptoOverlay();
+                alert(`[SECURE] Stripe billing completed! Your account (${paramUser}) has been successfully upgraded to ALUMNI ${paramTier.toUpperCase()} E2EE!`);
+            }, 1000);
+        } catch (e) {
+            hideCryptoOverlay();
+            alert("[ERROR] Billing upgrade verification failed: " + e.message);
+        }
     }
 }
 
@@ -2410,7 +2572,6 @@ async function submitTokenUpgrade() {
     errorEl.classList.add('hidden');
     successEl.classList.add('hidden');
     
-    // Check wallet tag and private PEM key
     const walletTag = localStorage.getItem(`wallet_tag_${session.username}`);
     const walletPem = localStorage.getItem(`wallet_pem_${session.username}`);
     
@@ -2420,10 +2581,15 @@ async function submitTokenUpgrade() {
         return;
     }
     
-    // Check balance
     const balanceText = document.getElementById('wallet-balance').innerText;
     const currentBalance = parseFloat(balanceText.replace(/[^\d.]/g, '')) || 0;
-    const requiredAmount = billingCycle === 'monthly' ? 279 : 2660;
+    
+    const prices = {
+        'Pro': { 'monthlyToken': 279, 'yearlyToken': 2660 },
+        'Enterprise': { 'monthlyToken': 1050, 'yearlyToken': 10080 },
+        'Ultimate': { 'monthlyToken': 699, 'yearlyToken': 6720 }
+    };
+    const requiredAmount = prices[selectedTier][billingCycle === 'monthly' ? 'monthlyToken' : 'yearlyToken'];
     
     if (currentBalance < requiredAmount) {
         errorEl.innerText = `Insufficient L1 Balance. Upgrade requires ${requiredAmount} ALUMNI. (Current: ${currentBalance})`;
@@ -2438,7 +2604,6 @@ async function submitTokenUpgrade() {
         await new Promise(resolve => setTimeout(resolve, 600));
         updateCryptoOverlayStep('rsa', 'active', '[..] Signing transaction payload locally with private PEM key...');
         
-        // Generate mock transaction signature
         const txPayload = JSON.stringify({
             sender: walletTag,
             recipient: "alumnimail.escrow",
@@ -2452,7 +2617,6 @@ async function submitTokenUpgrade() {
         
         updateCryptoOverlayStep('aes', 'active', '[..] Broadcasting signed subscription payload to L1 RPC node...');
         
-        // POST to blockchain relayer
         const res = await fetch('/api/v1/wallet/send', {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2475,14 +2639,13 @@ async function submitTokenUpgrade() {
         
         updateCryptoOverlayStep('db', 'completed', '[OK] L1 Block confirmed.');
         
-        await window.AlumniMailDB.upgradeUserTier(session.username, 'Pro', 'token', null, requiredAmount, txData.txHash);
+        await window.AlumniMailDB.upgradeUserTier(session.username, selectedTier, 'token', null, requiredAmount, txData.txHash);
         
-        // Update local wallet balance immediately
         updateWalletBalance(walletTag);
         
         setTimeout(() => {
             hideCryptoOverlay();
-            successEl.innerText = `Consensually verified on-chain! Upgraded to ALUMNI PRO. Tx: ${txData.txHash.substring(0, 12)}...`;
+            successEl.innerText = `Consensually verified on-chain! Upgraded to ALUMNI ${selectedTier.toUpperCase()}. Tx: ${txData.txHash.substring(0, 12)}...`;
             successEl.classList.remove('hidden');
             loadUserTier();
             setTimeout(closeUpgradeModal, 2000);
@@ -2492,6 +2655,529 @@ async function submitTokenUpgrade() {
         errorEl.innerText = "Blockchain consensus failed: " + e.message;
         errorEl.classList.remove('hidden');
     }
+}
+
+// -------------------------------------------------------------
+// WEBRTC CALLING & SIGNALING SYSTEM (ULTIMATE TIER ONLY)
+// -------------------------------------------------------------
+function logCallConsole(text, type = 'info') {
+    const logsEl = document.getElementById('call-logs');
+    if (logsEl) {
+        const span = document.createElement('span');
+        span.className = type;
+        span.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+        logsEl.appendChild(span);
+        logsEl.scrollTop = logsEl.scrollHeight;
+    }
+}
+
+function initSignalingSocket() {
+    if (signalingSocket) {
+        try { signalingSocket.close(); } catch(e) {}
+    }
+    
+    if (!session.username) return;
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    
+    signalingSocket = new WebSocket(wsUrl);
+    
+    signalingSocket.onopen = () => {
+        signalingSocket.send(JSON.stringify({
+            type: 'register',
+            username: session.username
+        }));
+        console.log(`[WS_SIGNAL] Registered signaling tunnel for ${session.username}`);
+    };
+    
+    signalingSocket.onmessage = async (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            switch (data.type) {
+                case 'registered':
+                    console.log("[WS_SIGNAL] Tunnel connection registered.");
+                    break;
+                case 'incoming-call':
+                    await handleIncomingCallSignal(data);
+                    break;
+                case 'call-accepted':
+                    await handleCallAcceptedSignal(data);
+                    break;
+                case 'webrtc-ice':
+                    await handleIceCandidateSignal(data);
+                    break;
+                case 'hangup-call':
+                    await handleRemoteHangupSignal();
+                    break;
+                case 'call-failed':
+                    handleCallFailedSignal(data);
+                    break;
+            }
+        } catch (e) {
+            console.error("[WS_SIGNAL] Parse error:", e);
+        }
+    };
+    
+    signalingSocket.onerror = (err) => {
+        console.error("[WS_SIGNAL] Tunnel error:", err);
+    };
+    
+    signalingSocket.onclose = () => {
+        console.log("[WS_SIGNAL] Tunnel closed. Reconnecting in 5s...");
+        setTimeout(initSignalingSocket, 5000);
+    };
+}
+
+async function initiateWebRTCCall(callType) {
+    if (session.userTier !== 'Ultimate') {
+        alert("[SECURE] WebRTC In-App Calling is exclusive to the premium ULTIMATE E2EE tier. Please upgrade to initiate voice, video, or screen sharing!");
+        openUpgradeModal();
+        return;
+    }
+    
+    const emails = window.AlumniMailDB.getEmailsForUser(session.username);
+    const email = emails.find(e => e.id === session.activeEmailId);
+    if (!email) {
+        alert("[SECURE] Please select an active email to call the sender/recipient.");
+        return;
+    }
+    
+    const peer = email.sender.toLowerCase().trim() === session.username.toLowerCase().trim() ? email.recipient : email.sender;
+    
+    cleanupCallState();
+    
+    currentCallPeer = peer;
+    currentCallType = callType;
+    
+    const callOverlay = document.getElementById('call-overlay');
+    if (callOverlay) callOverlay.classList.remove('hidden');
+    
+    const peerAddrDisplay = document.getElementById('call-peer-addr');
+    if (peerAddrDisplay) peerAddrDisplay.innerText = peer;
+    
+    const callStatusDisplay = document.getElementById('call-status');
+    if (callStatusDisplay) callStatusDisplay.innerText = "Ringing...";
+    
+    const logsEl = document.getElementById('call-logs');
+    if (logsEl) logsEl.innerHTML = '';
+    
+    logCallConsole("[SECURE] Initiating zero-knowledge E2EE Call tunnel...");
+    
+    try {
+        const constraints = {
+            audio: true,
+            video: callType === 'video'
+        };
+        
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        const localVideo = document.getElementById('local-video');
+        if (callType === 'video' && localVideo) {
+            localVideo.srcObject = localStream;
+            localVideo.style.display = "block";
+        }
+        
+        peerConnection = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        
+        localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+        });
+        
+        const dataChannel = peerConnection.createDataChannel("secure-audit-channel");
+        dataChannel.onopen = () => {
+            logCallConsole("[SECURE] E2EE data tunnel established.", "success");
+        };
+        dataChannel.onmessage = (e) => {
+            logCallConsole(`[PEER] ${e.data}`, "info");
+        };
+        
+        peerConnection.ontrack = (event) => {
+            const remoteVideo = document.getElementById('remote-video');
+            if (remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+                logCallConsole("[OK] Secure decrypted stream received from peer.", "success");
+            }
+        };
+        
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate && signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+                signalingSocket.send(JSON.stringify({
+                    type: 'webrtc-ice',
+                    target: currentCallPeer,
+                    candidate: event.candidate
+                }));
+            }
+        };
+        
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        
+        signalingSocket.send(JSON.stringify({
+            type: 'call-user',
+            target: currentCallPeer,
+            caller: session.username,
+            offer: offer,
+            callType: callType
+        }));
+        
+        logCallConsole("Awaiting remote cryptographic key exchange...", "info");
+    } catch (e) {
+        logCallConsole(`[ERROR] Media negotiation failed: ${e.message}`, "warning");
+        alert("[SECURE] Call initiation failed. Ensure microphone/camera access is permitted.");
+        cleanupCallState();
+    }
+}
+
+async function handleIncomingCallSignal(data) {
+    if (session.userTier !== 'Ultimate') {
+        signalingSocket.send(JSON.stringify({
+            type: 'hangup-call',
+            target: data.caller
+        }));
+        console.log(`[WS_SIGNAL] Auto-rejected call from ${data.caller} (Ultimate required, tier is ${session.userTier})`);
+        return;
+    }
+    
+    if (peerConnection) {
+        signalingSocket.send(JSON.stringify({
+            type: 'hangup-call',
+            target: data.caller
+        }));
+        console.log(`[WS_SIGNAL] Busy; auto-rejected call from ${data.caller}`);
+        return;
+    }
+    
+    pendingOffer = data.offer;
+    pendingCaller = data.caller;
+    currentCallType = data.callType;
+    
+    const incomingModal = document.getElementById('incoming-call-modal');
+    const callerDisplay = document.getElementById('incoming-caller-addr');
+    const typeDisplay = document.getElementById('incoming-call-type-label');
+    
+    if (incomingModal) incomingModal.classList.remove('hidden');
+    if (callerDisplay) callerDisplay.innerText = data.caller;
+    if (typeDisplay) {
+        typeDisplay.innerText = `E2EE Encrypted ${data.callType === 'video' ? 'Video' : 'Voice'} Call`;
+    }
+}
+
+async function acceptCall() {
+    const incomingModal = document.getElementById('incoming-call-modal');
+    if (incomingModal) incomingModal.classList.add('hidden');
+    
+    if (!pendingOffer || !pendingCaller) {
+        cleanupCallState();
+        return;
+    }
+    
+    currentCallPeer = pendingCaller;
+    
+    const callOverlay = document.getElementById('call-overlay');
+    if (callOverlay) callOverlay.classList.remove('hidden');
+    
+    const peerAddrDisplay = document.getElementById('call-peer-addr');
+    if (peerAddrDisplay) peerAddrDisplay.innerText = currentCallPeer;
+    
+    const callStatusDisplay = document.getElementById('call-status');
+    if (callStatusDisplay) callStatusDisplay.innerText = "Connecting...";
+    
+    const logsEl = document.getElementById('call-logs');
+    if (logsEl) logsEl.innerHTML = '';
+    
+    logCallConsole("[SECURE] Accepting E2EE tunnel handshake...");
+    
+    try {
+        const constraints = {
+            audio: true,
+            video: currentCallType === 'video'
+        };
+        
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        const localVideo = document.getElementById('local-video');
+        if (currentCallType === 'video' && localVideo) {
+            localVideo.srcObject = localStream;
+            localVideo.style.display = "block";
+        }
+        
+        peerConnection = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        
+        localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+        });
+        
+        peerConnection.ondatachannel = (event) => {
+            const channel = event.channel;
+            channel.onopen = () => {
+                logCallConsole("[SECURE] E2EE data tunnel established.", "success");
+            };
+            channel.onmessage = (e) => {
+                logCallConsole(`[PEER] ${e.data}`, "info");
+            };
+        };
+        
+        peerConnection.ontrack = (event) => {
+            const remoteVideo = document.getElementById('remote-video');
+            if (remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+                logCallConsole("[OK] Secure decrypted stream received from peer.", "success");
+            }
+        };
+        
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate && signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+                signalingSocket.send(JSON.stringify({
+                    type: 'webrtc-ice',
+                    target: currentCallPeer,
+                    candidate: event.candidate
+                }));
+            }
+        };
+        
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+        
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        signalingSocket.send(JSON.stringify({
+            type: 'call-accepted',
+            target: currentCallPeer,
+            answer: answer
+        }));
+        
+        if (callStatusDisplay) callStatusDisplay.innerText = "Secured / Connected";
+        logCallConsole("[SECURE] Peer negotiation complete. E2EE active.", "success");
+        
+        pendingOffer = null;
+        pendingCaller = null;
+    } catch (e) {
+        logCallConsole(`[ERROR] Media negotiation failed: ${e.message}`, "warning");
+        alert("[SECURE] Failed to accept call. Ensure microphone/camera access is permitted.");
+        cleanupCallState();
+    }
+}
+
+function declineCall() {
+    const incomingModal = document.getElementById('incoming-call-modal');
+    if (incomingModal) incomingModal.classList.add('hidden');
+    
+    if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN && pendingCaller) {
+        signalingSocket.send(JSON.stringify({
+            type: 'hangup-call',
+            target: pendingCaller
+        }));
+    }
+    
+    pendingOffer = null;
+    pendingCaller = null;
+}
+
+async function handleCallAcceptedSignal(data) {
+    if (!peerConnection) return;
+    
+    try {
+        logCallConsole("Consensual peer handshake verified. Negotiating streams...", "success");
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        
+        const callStatusDisplay = document.getElementById('call-status');
+        if (callStatusDisplay) callStatusDisplay.innerText = "Secured / Connected";
+        
+        logCallConsole("[SECURE] Peer connection complete. E2EE active.", "success");
+    } catch (e) {
+        logCallConsole(`[ERROR] SetRemoteDescription failed: ${e.message}`, "warning");
+    }
+}
+
+async function handleIceCandidateSignal(data) {
+    if (!peerConnection) return;
+    try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (e) {
+        console.error("[WS_SIGNAL] Failed adding ICE candidate:", e);
+    }
+}
+
+async function handleRemoteHangupSignal() {
+    logCallConsole("Remote peer closed the connection.", "warning");
+    setTimeout(cleanupCallState, 1500);
+}
+
+function handleCallFailedSignal(data) {
+    logCallConsole(`[ERROR] Call failed: ${data.reason}`, "warning");
+    setTimeout(cleanupCallState, 2000);
+}
+
+function hangupCall() {
+    if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN && currentCallPeer) {
+        signalingSocket.send(JSON.stringify({
+            type: 'hangup-call',
+            target: currentCallPeer
+        }));
+    }
+    cleanupCallState();
+}
+
+function toggleLocalAudio() {
+    if (!localStream) return;
+    isMicMuted = !isMicMuted;
+    
+    localStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMicMuted;
+    });
+    
+    const btn = document.getElementById('btn-toggle-mic');
+    if (btn) {
+        if (isMicMuted) {
+            btn.classList.add('active-toggle');
+            logCallConsole("Microphone muted locally.", "info");
+        } else {
+            btn.classList.remove('active-toggle');
+            logCallConsole("Microphone unmuted locally.", "info");
+        }
+    }
+}
+
+function toggleLocalVideo() {
+    if (!localStream) return;
+    isCamOff = !isCamOff;
+    
+    localStream.getVideoTracks().forEach(track => {
+        track.enabled = !isCamOff;
+    });
+    
+    const btn = document.getElementById('btn-toggle-cam');
+    if (btn) {
+        if (isCamOff) {
+            btn.classList.add('active-toggle');
+            logCallConsole("Camera feed disabled locally.", "info");
+        } else {
+            btn.classList.remove('active-toggle');
+            logCallConsole("Camera feed enabled locally.", "info");
+        }
+    }
+}
+
+async function toggleScreenShare() {
+    if (!peerConnection) return;
+    
+    const btn = document.getElementById('btn-share-screen');
+    
+    if (isScreenSharing) {
+        // Stop screen sharing and switch back to camera
+        if (screenStream) {
+            screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+        }
+        
+        isScreenSharing = false;
+        if (btn) btn.classList.remove('active-toggle');
+        
+        logCallConsole("Stopped screen sharing. Restoring camera stream...", "info");
+        
+        // Restore local camera track
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            const senders = peerConnection.getSenders();
+            const sender = senders.find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+                await sender.replaceTrack(videoTrack);
+            }
+            
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.srcObject = localStream;
+            }
+        }
+    } else {
+        try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const screenTrack = screenStream.getVideoTracks()[0];
+            
+            isScreenSharing = true;
+            if (btn) btn.classList.add('active-toggle');
+            
+            logCallConsole("Screen sharing active. Tunneling display stream...", "success");
+            
+            const senders = peerConnection.getSenders();
+            const sender = senders.find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+                await sender.replaceTrack(screenTrack);
+            }
+            
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.srcObject = screenStream;
+            }
+            
+            screenTrack.onended = () => {
+                if (isScreenSharing) toggleScreenShare();
+            };
+        } catch (e) {
+            console.error("Screen sharing failed:", e);
+            logCallConsole("[ERROR] Screen sharing permissions rejected.", "warning");
+        }
+    }
+}
+
+function cleanupCallState() {
+    console.log("[CALL_WEBRTC] Cleaning up WebRTC call state...");
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            try { track.stop(); } catch(e) {}
+        });
+        localStream = null;
+    }
+    
+    if (screenStream) {
+        screenStream.getTracks().forEach(track => {
+            try { track.stop(); } catch(e) {}
+        });
+        screenStream = null;
+    }
+    
+    if (peerConnection) {
+        try { peerConnection.close(); } catch(e) {}
+        peerConnection = null;
+    }
+    
+    currentCallPeer = null;
+    currentCallType = null;
+    pendingOffer = null;
+    pendingCaller = null;
+    isMicMuted = false;
+    isCamOff = false;
+    isScreenSharing = false;
+    
+    const callOverlay = document.getElementById('call-overlay');
+    if (callOverlay) callOverlay.classList.add('hidden');
+    
+    const incomingCallModal = document.getElementById('incoming-call-modal');
+    if (incomingCallModal) incomingCallModal.classList.add('hidden');
+    
+    const localVideo = document.getElementById('local-video');
+    if (localVideo) {
+        localVideo.srcObject = null;
+        localVideo.style.display = "none";
+    }
+    
+    const remoteVideo = document.getElementById('remote-video');
+    if (remoteVideo) remoteVideo.srcObject = null;
+    
+    const btnMic = document.getElementById('btn-toggle-mic');
+    if (btnMic) btnMic.classList.remove('active-toggle');
+    
+    const btnCam = document.getElementById('btn-toggle-cam');
+    if (btnCam) btnCam.classList.remove('active-toggle');
+    
+    const btnScreen = document.getElementById('btn-share-screen');
+    if (btnScreen) btnScreen.classList.remove('active-toggle');
 }
 
 // -------------------------------------------------------------
@@ -2691,7 +3377,13 @@ async function renderAgenda(dayString) {
         lockedCard.style.cssText = "padding: 15px; text-align: center; border: 1px solid var(--accent-light); cursor: pointer; transition: all 0.2s;";
         lockedCard.onclick = openUpgradeModal;
         lockedCard.innerHTML = `
-            <div style="font-size: 1.1rem; margin-bottom: 5px;"><img src="assets/logo.png" class="logo-img" alt="Secure" style="height: 1.2em; width: auto; vertical-align: middle;"></div>
+            <div style="font-size: 1.1rem; margin-bottom: 5px; display: flex; justify-content: center; align-items: center; color: var(--accent-light);">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.4));">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    <circle cx="12" cy="16" r="1.5"></circle>
+                </svg>
+            </div>
             <h4 style="margin:0 0 5px 0; font-size: 0.8rem; font-weight: 800; color: var(--accent-light);">E2EE Details Locked</h4>
             <p style="margin:0; font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
                 Zero-Knowledge agenda details are premium E2EE capabilities. Upgrade to PRO to view encrypted events.

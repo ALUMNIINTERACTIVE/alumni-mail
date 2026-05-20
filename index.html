@@ -10,9 +10,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="grain-overlay"></div>
 
     <!-- INSECURE CONTEXT WARNING BANNER -->
     <div id="insecure-context-alert" class="hidden" style="position: fixed; top: 0; left: 0; right: 0; z-index: 9999; background: rgba(239, 68, 68, 0.15); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(239, 68, 68, 0.4); padding: 15px 25px; font-family: 'Inter', sans-serif; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); display: flex; justify-content: center;">
@@ -43,12 +44,13 @@
         <!-- SECTION 1: AUTHENTICATION SCREEN -->
         <div id="auth-screen" class="auth-wrapper active">
             <div class="auth-card glass-panel">
-                <div class="auth-header">
-                    <div class="logo-container">
-                        <span class="badge success">ZERO-KNOWLEDGE</span>
+                <div class="auth-header" style="display: flex; flex-direction: column; align-items: center; margin-bottom: 24px;">
+                    <div class="relative" style="width: 96px; height: 96px; margin: 0 auto 16px auto; position: relative;">
+                        <img alt="Alumni Mail Logo" class="logo-img" style="width: 100%; height: 100%; object-fit: contain; filter: brightness(1.1) contrast(1.25) drop-shadow(0 20px 25px rgba(0,0,0,0.15));" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNgNIDNQuspjNk-bpvZkZWHe2xeZRIxJ0cpwIBll-MOZ-sYhLyehq1kfemsTZsV0hnVzHO5nicaNwkTiJ0_SqEhJy8m6QsRUuwB0nInHOgAb-6l9EENzrfT6OXOG2rL34QYz_I6THyitYSpxug5IFH0opCacsTXMp9i872DAXpmmyMC663abWg5WHvgMeOdkipfFOwq-5RY_OZ98QOQSWkk0UNEvnruJBg_1JVwfeV4ye9OYAuEiN70jzjiabEN_cKbAYtbv86qXLp"/>
+                        <div class="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none rounded-lg" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none;"></div>
                     </div>
-                    <h1>ALUMNI MAIL</h1>
-                    <p class="subtitle">E2EE Privacy Ecosystem for Enterprise & Alumni</p>
+                    <h1 style="font-size: 1.8rem; font-weight: 600; text-align: center; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-color); margin: 0 0 4px 0;">ALUMNI MAIL</h1>
+                    <p style="color: var(--text-muted); font-size: 0.75rem; text-align: center; text-transform: uppercase; letter-spacing: 0.3em; margin: 0;">PREMIUM NETWORK ACCESS</p>
                 </div>
 
                 <div class="auth-tabs">
@@ -297,6 +299,12 @@
                                     </div>
                                 </div>
                                 <div class="detail-actions">
+                                    <button class="btn secondary" id="btn-call-voice" onclick="initiateWebRTCCall('voice')" style="display: flex; align-items: center; gap: 4px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">call</span> Voice
+                                    </button>
+                                    <button class="btn secondary" id="btn-call-video" onclick="initiateWebRTCCall('video')" style="display: flex; align-items: center; gap: 4px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">video_call</span> Video
+                                    </button>
                                     <button class="btn secondary" id="btn-reply" onclick="replyToActiveEmail()">
                                         Reply
                                     </button>
@@ -309,15 +317,7 @@
                                 </div>
                             </div>
 
-                            <div class="security-card glass-panel" id="security-badge-card">
-                                <div class="security-card-header">
-                                    <span class="secure-indicator-dot secure"></span>
-                                    <span class="security-title" id="security-card-title">[SECURE] End-to-End Encrypted (E2EE)</span>
-                                </div>
-                                <p class="security-card-text" id="security-card-text">
-                                    This message was encrypted on the sender's client and decrypted locally in your browser using your derived RSA private key. The server only sees base64 ciphertext.
-                                </p>
-                            </div>
+                            <!-- Security explanation card removed to save space per premium UI specs -->
 
                             <h2 id="detail-subject" class="email-subject">Decrypted Subject Line</h2>
 
@@ -627,7 +627,7 @@
                     <div class="composer-sec-row">
                         <span class="status-indicator-wrapper">
                             <span class="status-dot pulsing emerald" id="composer-sec-dot"></span>
-                            <span id="composer-sec-text" class="bold"><img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> Recipient E2EE Crypt Key Active</span>
+                            <span id="composer-sec-text" class="bold" style="display: flex; align-items: center; gap: 4px;"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1; font-size: 14px; color: var(--success-light);">lock</span> Recipient E2EE Crypt Key Active</span>
                         </span>
                         <div class="sec-right-options">
                             <label class="switch-wrapper hidden" id="password-toggle-wrapper">
@@ -785,89 +785,131 @@
 
     <!-- SECTION 6B: UPGRADE ACCOUNT MODAL -->
     <div id="upgrade-modal" class="modal-container hidden">
-        <div class="modal-card glass-panel" style="max-width: 580px; width: 100%; border: 1px solid var(--accent-light); box-shadow: 0 0 30px rgba(0, 229, 255, 0.15);">
-            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 15px;">
-                <h3 style="margin: 0; font-weight: 800; color: var(--accent-light); font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
-                    Upgrade to ALUMNI PRO
+        <div class="modal-card glass-panel" style="max-width: 960px; width: 100%; border: 1px solid var(--border-color); box-shadow: 0 0 30px rgba(255, 255, 255, 0.05); background: #131313;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444748; padding-bottom: 12px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-weight: 400; color: #ffffff; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                    Select Premium Membership Tier
                 </h3>
                 <button class="btn-icon-close" onclick="closeUpgradeModal()">✕</button>
             </div>
             
             <!-- Plan Billing Cycle Toggle -->
-            <div class="billing-cycle-toggle-wrapper" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; background: rgba(255, 255, 255, 0.02); padding: 8px; border-radius: 30px; border: 1px solid var(--border-color);">
-                <span id="label-billing-monthly" class="font-bold" style="font-size: 0.85rem; color: var(--text-color); cursor: pointer;" onclick="setBillingCycle('monthly')">Monthly Billing</span>
-                <div id="billing-cycle-switch" class="switch" style="position: relative; width: 44px; height: 22px; background: var(--accent-light); border-radius: 15px; cursor: pointer; transition: background 0.3s;" onclick="toggleBillingCycle()">
-                    <div id="billing-cycle-knob" class="knob" style="position: absolute; top: 2px; left: 24px; width: 18px; height: 18px; background: #000; border-radius: 50%; transition: left 0.3s;"></div>
+            <div class="billing-cycle-toggle-wrapper" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; background: #1b1b1b; padding: 8px; border-radius: 4px; border: 1px solid #444748; max-width: 320px; margin-left: auto; margin-right: auto;">
+                <span id="label-billing-monthly" class="font-bold" style="font-size: 0.85rem; color: #8e9192; cursor: pointer;" onclick="setBillingCycle('monthly')">Monthly</span>
+                <div id="billing-cycle-switch" class="switch" style="position: relative; width: 44px; height: 22px; background: #444748; border-radius: 11px; cursor: pointer; transition: background 0.3s;" onclick="toggleBillingCycle()">
+                    <div id="billing-cycle-knob" class="knob" style="position: absolute; top: 2px; left: 24px; width: 18px; height: 18px; background: #ffffff; border-radius: 50%; transition: left 0.3s;"></div>
                 </div>
-                <span id="label-billing-yearly" class="font-bold" style="font-size: 0.85rem; color: var(--accent-light); cursor: pointer;" onclick="setBillingCycle('yearly')">
-                    Yearly Billing <span style="background: var(--success); color: #000; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; margin-left: 4px;">SAVE 20%</span>
+                <span id="label-billing-yearly" class="font-bold" style="font-size: 0.85rem; color: #ffffff; cursor: pointer;" onclick="setBillingCycle('yearly')">
+                    Yearly <span style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 0.65rem; padding: 2px 6px; border-radius: 2px; font-weight: 600; margin-left: 4px; border: 1px solid rgba(16, 185, 129, 0.2);">SAVE 20%</span>
                 </span>
             </div>
 
-            <!-- Plan Comparison Cards -->
-            <div class="upgrade-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+            <!-- Plan Comparison Cards (4-column pricing-grid) -->
+            <div class="pricing-grid">
                 <!-- FREE PLAN -->
-                <div class="plan-card glass-panel" style="padding: 15px; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between;">
+                <div class="pricing-card" id="card-tier-free" style="border-radius: 4px;">
                     <div>
-                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 800;">ALUMNI Free</h4>
-                        <div class="plan-price" style="font-size: 1.5rem; font-weight: 800; margin-bottom: 12px; color: var(--text-muted);">$0.00</div>
-                        <ul style="padding-left: 15px; margin: 0; font-size: 0.75rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px;">
-                            <li>Secure E2EE Email</li>
-                            <li>Standard 100MB Database Storage</li>
-                            <li><strong>1 Free Custom Domain email</strong></li>
-                            <li>Standard L1 balance tracking</li>
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 600; color: #ffffff;">ALUMNI Free</h4>
+                        <div class="price">$0.00</div>
+                        <ul style="padding-left: 0;">
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #8e9192;">check</span> Secure E2EE Email</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #8e9192;">check</span> 100MB DB Storage</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #8e9192;">check</span> 1 Custom Domain email</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #8e9192;">check</span> Standard balance tracking</li>
                         </ul>
                     </div>
-                    <button class="btn secondary-sm full-width" style="margin-top: 15px; pointer-events: none; opacity: 0.5;">Current Tier</button>
+                    <button class="btn secondary-sm full-width" style="margin-top: auto; pointer-events: none; opacity: 0.5;">Current Tier</button>
                 </div>
 
                 <!-- PRO PLAN -->
-                <div class="plan-card glass-panel" style="padding: 15px; border: 1px solid var(--accent-light); position: relative; background: rgba(0, 229, 255, 0.02); display: flex; flex-direction: column; justify-content: space-between;">
-                    <div style="position: absolute; top: -10px; right: 10px; background: var(--accent-light); color: #000; font-size: 0.65rem; font-weight: 800; padding: 2px 8px; border-radius: 10px;">RECOMMENDED</div>
+                <div class="pricing-card selected" id="card-tier-pro" style="border-radius: 4px;" onclick="selectPricingCard('Pro')">
+                    <div style="position: absolute; top: -10px; right: 10px; background: #ffffff; color: #131313; font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; border: 1px solid #444748;">POPULAR</div>
                     <div>
-                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 800; color: var(--accent-light);">ALUMNI Pro</h4>
-                        <div class="plan-price" style="display: flex; flex-direction: column; margin-bottom: 12px;">
-                            <div style="display: flex; align-items: baseline; gap: 4px;">
-                                <span id="pro-price-display" style="font-size: 1.5rem; font-weight: 800; color: var(--text-color);">$3.99</span>
-                                <span id="pro-period-display" style="font-size: 0.75rem; color: var(--text-muted);">/ month</span>
-                            </div>
-                            <span id="alumni-promo-badge" style="font-size: 0.7rem; color: var(--success-light); font-weight: 800; text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);">
-                                Get 30% Off First Year with ALUMNI!
-                            </span>
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 600; color: #ffffff;">ALUMNI Pro</h4>
+                        <div class="price">
+                            <span id="pro-price-display">$38.00</span>
+                            <span id="pro-period-display">/ year</span>
                         </div>
-                        <ul style="padding-left: 15px; margin: 0; font-size: 0.75rem; display: flex; flex-direction: column; gap: 8px;">
-                            <li><strong>Unlimited</strong> Custom Domains</li>
-                            <li><strong>Unlimited</strong> Custom Domain Aliases</li>
-                            <li>Premium E2EE Calendar access</li>
-                            <li>High-speed Validator RPC priority</li>
-                            <li><img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> Upgraded 10GB Secure Storage</li>
+                        <ul style="padding-left: 0; margin-top: 12px;">
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Unlimited Domains</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Unlimited Aliases</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Premium Calendar</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Upgraded 10GB Database</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Validator RPC priority</li>
                         </ul>
                     </div>
-                    <div style="margin-top: 15px;">
-                        <!-- Payment Method Toggle -->
-                        <div class="payment-method-selector" style="display: flex; gap: 6px; margin-bottom: 8px;">
-                            <button id="pay-method-fiat" class="btn secondary-sm flex-1 font-bold active" onclick="setPaymentMethod('fiat')" style="padding: 4px 6px; font-size: 0.7rem;">Credit Card</button>
-                            <button id="pay-method-token" class="btn secondary-sm flex-1 font-bold" onclick="setPaymentMethod('token')" style="padding: 4px 6px; font-size: 0.7rem;">ALUMNI Token</button>
+                </div>
+
+                <!-- ENTERPRISE PLAN -->
+                <div class="pricing-card" id="card-tier-enterprise" style="border-radius: 4px;" onclick="selectPricingCard('Enterprise')">
+                    <div>
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 600; color: #ffffff;">ALUMNI Enterprise</h4>
+                        <div class="price">
+                            <span id="ent-price-display">$144.00</span>
+                            <span id="ent-period-display">/ year</span>
                         </div>
-                        
-                        <div id="fiat-payment-form" style="display: flex; flex-direction: column; gap: 6px;">
-                            <input type="text" id="upgrade-card-number" class="input-field" placeholder="Card Number (e.g., 4111 2222 3333 4444)" style="font-size: 0.75rem; padding: 6px 8px;">
-                            <button class="btn primary-sm glow full-width" onclick="submitFiatUpgrade()">Pay with Credit Card</button>
+                        <ul style="padding-left: 0; margin-top: 12px;">
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Everything in Pro</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> 100GB Secure Storage</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Dedicated E2EE Node priority</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Advanced security audits</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Multi-sig calendars</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- ULTIMATE PLAN -->
+                <div class="pricing-card ultimate-card" id="card-tier-ultimate" style="border-radius: 4px;" onclick="selectPricingCard('Ultimate')">
+                    <div style="position: absolute; top: -10px; right: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 0.65rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; border: 1px solid rgba(16, 185, 129, 0.2);">E2EE CALLING</div>
+                    <div>
+                        <h4 style="margin: 0 0 5px 0; font-size: 0.95rem; font-weight: 600; color: #10b981;">ALUMNI Ultimate</h4>
+                        <div class="price">
+                            <span id="ult-price-display">$96.00</span>
+                            <span id="ult-period-display">/ year</span>
                         </div>
-                        
-                        <div id="token-payment-form" class="hidden" style="display: flex; flex-direction: column; gap: 6px; text-align: center;">
-                            <div style="background: rgba(255,255,255,0.03); border: 1px dashed var(--border-color); padding: 8px; border-radius: 6px;">
-                                <span style="font-size: 0.7rem; color: var(--text-muted); display: block;">L1 Total Payable (30% Off):</span>
-                                <span id="token-payable-display" class="accent-green font-bold font-mono" style="font-size: 1.1rem;">279 ALUMNI</span>
-                            </div>
-                            <button class="btn primary-sm glow full-width" onclick="submitTokenUpgrade()">Authorize L1 Token Payment</button>
-                        </div>
+                        <ul style="padding-left: 0; margin-top: 12px;">
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Everything in Enterprise</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Uncapped Secure Storage</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> WebRTC Audio/Video Calls</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> WebRTC Peer Screen Share</li>
+                            <li><span class="material-symbols-outlined" style="font-size: 14px; color: #10b981;">check</span> Emerald Verification Badge</li>
+                        </ul>
                     </div>
                 </div>
             </div>
+
+            <!-- Payment Controls segment for the selected premium tier -->
+            <div class="payment-controls-panel" style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #444748; background: #1b1b1b; padding: 20px; border-radius: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                    <div style="display: flex; flex-direction: column;">
+                        <span id="payment-summary-title" style="font-weight: 600; color: #ffffff; font-size: 1rem;">Selected Tier: ALUMNI Pro</span>
+                        <span id="payment-summary-desc" style="font-size: 0.8rem; color: #8e9192;">Price: $38.00 / year</span>
+                    </div>
+                    <!-- Payment Method Toggle -->
+                    <div class="payment-method-selector" style="display: flex; gap: 8px;">
+                        <button id="pay-method-fiat" class="btn secondary active" onclick="setPaymentMethod('fiat')" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 2px;">Credit Card (Stripe)</button>
+                        <button id="pay-method-token" class="btn secondary" onclick="setPaymentMethod('token')" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 2px;">ALUMNI Token</button>
+                    </div>
+                </div>
+                
+                <div id="fiat-payment-form" style="display: flex; flex-direction: column; gap: 12px; max-width: 400px;">
+                    <p style="font-size: 0.8rem; color: #8e9192; margin: 0;">You will be redirected securely to Stripe's payment gateway to complete your premium subscription checkout.</p>
+                    <button class="btn primary glow" onclick="submitFiatUpgrade()" style="border-radius: 2px; align-self: flex-start; padding: 10px 24px; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">credit_card</span> Launch Stripe Checkout
+                    </button>
+                </div>
+                
+                <div id="token-payment-form" class="hidden" style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="background: rgba(255,255,255,0.02); border: 1px dashed #444748; padding: 12px; border-radius: 4px; display: inline-block; max-width: 320px;">
+                        <span style="font-size: 0.75rem; color: #8e9192; display: block;">L1 Total Payable (30% Off):</span>
+                        <span id="token-payable-display" class="accent-green font-bold font-mono" style="font-size: 1.4rem; color: #10b981;">2660 ALUMNI</span>
+                    </div>
+                    <button class="btn primary glow" onclick="submitTokenUpgrade()" style="border-radius: 2px; align-self: flex-start; padding: 10px 24px;">Authorize L1 Token Payment</button>
+                </div>
+            </div>
             
-            <div id="upgrade-error" class="auth-error-msg hidden" style="font-size: 0.75rem; margin-top: 10px;"></div>
-            <div id="upgrade-success" class="auth-success-msg hidden" style="color: var(--success-light); font-size: 0.75rem; margin-top: 10px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.2);"></div>
+            <div id="upgrade-error" class="auth-error-msg hidden" style="font-size: 0.75rem; margin-top: 10px; color: #ffb4ab; background: rgba(255, 180, 171, 0.05); padding: 8px; border: 1px solid rgba(255, 180, 171, 0.2);"></div>
+            <div id="upgrade-success" class="auth-success-msg hidden" style="color: #34d399; font-size: 0.75rem; margin-top: 10px; text-shadow: 0 0 10px rgba(52, 211, 153, 0.2); background: rgba(52, 211, 153, 0.05); padding: 8px; border: 1px solid rgba(52, 211, 153, 0.2);"></div>
         </div>
     </div>
 
@@ -900,8 +942,8 @@
                     <textarea id="meeting-desc" class="input-field" style="min-height: 80px; resize: vertical;" placeholder="Discuss crypt keys and server sync. Fully encrypted."></textarea>
                 </div>
                 
-                <div class="alert warning" style="margin: 0; font-size: 0.75rem; padding: 8px 10px;">
-                    <img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> <strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.
+                <div class="alert warning" style="margin: 0; font-size: 0.75rem; padding: 8px 10px; display: flex; align-items: center; gap: 6px;">
+                    <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1; font-size: 14px; color: var(--success-light);">lock</span> <span><strong>E2EE Standard:</strong> This event is locally encrypted inside your browser before transmitting to node storage.</span>
                 </div>
 
                 <div class="form-actions" style="margin-top: 10px;">
@@ -965,7 +1007,7 @@
                         <small class="helper-text">Derived locally from your password using PBKDF2. Never leaves your browser.</small>
                     </div>
                     <div class="memory-box glass-panel">
-                        <h4><img src="assets/logo.png" class="logo-img-inline" alt="Secure Logo"> Unlocked RSA-OAEP Private Key</h4>
+                        <h4 style="display: flex; align-items: center; gap: 4px;"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1; font-size: 14px; color: var(--success-light);">lock</span> Unlocked RSA-OAEP Private Key</h4>
                         <div class="font-mono value-label" id="mem-privkey-val">Key locked. Please log in.</div>
                         <small class="helper-text">Used to decrypt session keys of incoming E2EE messages. Restored in-memory only.</small>
                     </div>
@@ -977,6 +1019,71 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- SECTION 6D: WEBRTC CALLING OVERLAY HUD -->
+    <div id="call-overlay" class="hidden">
+        <div class="call-header">
+            <span style="font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 6px; color: #ffffff;">
+                <span class="material-symbols-outlined pulsing emerald" style="font-variation-settings: 'FILL' 1; font-size: 16px; color: #10b981;">lock</span> SECURE CALL: <span id="call-peer-addr">peer@alumnimail.app</span>
+            </span>
+            <button class="btn-icon-close" onclick="hangupCall()" style="background: none; border: none; color: #8e9192; cursor: pointer; font-size: 1rem;">✕</button>
+        </div>
+        <div class="call-body">
+            <div class="call-video-grid">
+                <div class="video-wrapper" id="remote-video-container">
+                    <video id="remote-video" autoplay playsinline></video>
+                    <div class="video-label">Decrypted Secure Feed</div>
+                    <video id="local-video" class="mini-pip" autoplay playsinline muted style="display: none;"></video>
+                </div>
+            </div>
+            
+            <div id="calling-status-container" style="text-align: center; width: 100%;">
+                <span id="call-status" class="font-label-caps" style="font-size: 0.75rem; color: #8e9192; letter-spacing: 0.1em; text-transform: uppercase;">Connecting Tunnel...</span>
+            </div>
+
+            <!-- Active call logs console log -->
+            <div class="call-console-log" id="call-logs">
+                <span class="info">[SECURE] Initializing PeerConnection...</span>
+            </div>
+            
+            <div class="call-controls">
+                <button class="btn-call-control" id="btn-toggle-mic" onclick="toggleLocalAudio()" title="Mute/Unmute Microphone">
+                    <span class="material-symbols-outlined">mic</span>
+                </button>
+                <button class="btn-call-control" id="btn-toggle-cam" onclick="toggleLocalVideo()" title="Toggle Camera">
+                    <span class="material-symbols-outlined">videocam</span>
+                </button>
+                <button class="btn-call-control" id="btn-share-screen" onclick="toggleScreenShare()" title="Share Screen">
+                    <span class="material-symbols-outlined">screen_share</span>
+                </button>
+                <button class="btn-call-control hangup" onclick="hangupCall()" title="Hang Up Call">
+                    <span class="material-symbols-outlined">call_end</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 6E: INCOMING CALL SLIDER MODAL -->
+    <div id="incoming-call-modal" class="hidden">
+        <div class="incoming-call-header">
+            <span class="material-symbols-outlined pulsing emerald" style="font-variation-settings: 'FILL' 1; font-size: 18px; color: #10b981;">call</span>
+            <span style="font-weight: 600; font-size: 0.9rem; color: #ffffff;">Incoming Secure Call</span>
+        </div>
+        <div class="incoming-call-body">
+            <p style="font-size: 0.8rem; color: #cbd5e1; margin: 0;">
+                <strong id="incoming-caller-addr" class="font-mono">caller@alumnimail.app</strong> is calling you...
+            </p>
+            <p style="font-size: 0.7rem; color: #8e9192; margin: 0;" id="incoming-call-type-label">E2EE Encrypted Video Call</p>
+            <div style="display: flex; gap: 12px; margin-top: 8px;">
+                <button class="btn primary flex-1" onclick="acceptCall()" style="background: #10b981; color: #131313; border-color: #10b981; padding: 8px; border-radius: 2px;">
+                    Accept
+                </button>
+                <button class="btn secondary flex-1" onclick="declineCall()" style="border-color: #93000a; color: #ffb4ab; padding: 8px; border-radius: 2px;">
+                    Decline
+                </button>
+            </div>
         </div>
     </div>
 

@@ -425,7 +425,7 @@ class MockDatabase {
             });
             if (res.ok) {
                 const data = await res.json();
-                localStorage.setItem(`user_tier_${norm}`, 'Pro');
+                localStorage.setItem(`user_tier_${norm}`, tier);
                 this.emit();
                 return data;
             } else {

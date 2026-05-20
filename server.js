@@ -997,6 +997,68 @@ app.post('/api/v1/wallet/send', async (req, res) => {
 // -------------------------------------------------------------
 // PREMIUM UPGRADE ENDPOINT (Dual-currency Credit Card / L1 Token)
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// PREMIUM UPGRADE ENDPOINTS (Dual-currency Stripe Card / L1 Token)
+// -------------------------------------------------------------
+app.post('/api/v1/subscription/create-checkout-session', async (req, res) => {
+    const { username, tier, billingCycle } = req.body;
+    if (!username || !tier || !billingCycle) {
+        return res.status(400).json({ error: "Missing checkout parameters." });
+    }
+    
+    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    
+    if (STRIPE_SECRET_KEY) {
+        try {
+            const stripe = require('stripe')(STRIPE_SECRET_KEY);
+            const prices = {
+                'Pro': { 'monthly': 399, 'yearly': 3800 },
+                'Enterprise': { 'monthly': 1500, 'yearly': 14400 },
+                'Ultimate': { 'monthly': 999, 'yearly': 9600 }
+            };
+            
+            const amountInCents = prices[tier] ? prices[tier][billingCycle] : 3800;
+            
+            const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+            const host = req.get('host');
+            
+            const session = await stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                line_items: [{
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: `Alumni Mail - ${tier} Tier (${billingCycle})`,
+                            description: `Premium E2EE communications and scheduling dashboard access under the verified ${tier} plan.`,
+                        },
+                        unit_amount: amountInCents,
+                        recurring: {
+                            interval: billingCycle === 'monthly' ? 'month' : 'year',
+                        },
+                    },
+                    quantity: 1,
+                }],
+                mode: 'subscription',
+                success_url: `${proto}://${host}/?stripe_checkout_success=true&session_id={CHECKOUT_SESSION_ID}&username=${encodeURIComponent(username)}&tier=${tier}`,
+                cancel_url: `${proto}://${host}/?stripe_checkout_cancel=true`,
+            });
+            
+            auditLog("STRIPE_GATEWAY", `Created live Stripe Checkout session for ${username} (${tier} - ${billingCycle})`);
+            return res.json({ success: true, url: session.url });
+        } catch (err) {
+            console.error("[STRIPE SESSION ERROR]", err);
+        }
+    }
+    
+    // Sandbox simulator fallback
+    const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const host = req.get('host');
+    const simUrl = `${proto}://${host}/checkout-simulator.html?username=${encodeURIComponent(username)}&tier=${tier}&billingCycle=${billingCycle}`;
+    
+    auditLog("STRIPE_GATEWAY", `Created simulated Stripe Sandbox session for ${username} (${tier} - ${billingCycle})`);
+    return res.json({ success: true, url: simUrl });
+});
+
 app.post('/api/v1/subscription/upgrade', (req, res) => {
     const { username, tier, paymentMethod, cardDetails, alumniAmount, txHash } = req.body;
     const db = loadDB();
@@ -1018,22 +1080,22 @@ app.post('/api/v1/subscription/upgrade', (req, res) => {
     // Dynamic Audit Log for SQL traces
     auditLog(
         "UPDATE",
-        `UPDATE users SET tier = 'Pro', payment_method = '${paymentMethod}' WHERE username = '${normUser}';`,
+        `UPDATE users SET tier = '${tier}', payment_method = '${paymentMethod}' WHERE username = '${normUser}';`,
         { username: normUser, tier, paymentMethod }
     );
 
     if (paymentMethod === 'token') {
         auditLog(
             "INSERT",
-            `INSERT INTO L1_ledger_transactions (sender, recipient, amount, payload) VALUES ('${normUser}', 'alumnimail.escrow', ${alumniAmount}, 'PRO_UPGRADE_ANNUAL');`,
+            `INSERT INTO L1_ledger_transactions (sender, recipient, amount, payload) VALUES ('${normUser}', 'alumnimail.escrow', ${alumniAmount}, '${tier.toUpperCase()}_UPGRADE');`,
             { txHash }
         );
     }
 
     res.json({
         success: true,
-        tier: 'Pro',
-        message: `Account successfully upgraded to ALUMNI PRO via ${paymentMethod === 'token' ? 'L1 Token Transfer' : 'Credit Card Transaction'}.`
+        tier: tier,
+        message: `Account successfully upgraded to ALUMNI ${tier.toUpperCase()} via ${paymentMethod === 'token' ? 'L1 Token Transfer' : 'Credit Card Transaction'}.`
     });
 });
 
@@ -1109,9 +1171,113 @@ app.get('*', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// BOOTSTRAPPING SERVER
+// BOOTSTRAPPING HTTP & WEBSOCKET SIGNALLING SERVERS
 // -------------------------------------------------------------
-app.listen(PORT, async () => {
+const http = require('http');
+const ws = require('ws');
+const server = http.createServer(app);
+const wss = new ws.Server({ server });
+
+wss.on('connection', (socket) => {
+    let registeredUser = null;
+    
+    socket.on('message', (messageRaw) => {
+        try {
+            const data = JSON.parse(messageRaw);
+            const { type } = data;
+            
+            switch (type) {
+                case 'register': {
+                    const normUser = getNormUsername(data.username);
+                    registeredUser = normUser;
+                    activeCalls.set(normUser, socket);
+                    socket.send(JSON.stringify({ type: 'registered', status: 'success' }));
+                    auditLog("WS_SIGNAL", `User registered for calling signaling: ${normUser}`);
+                    break;
+                }
+                
+                case 'call-user': {
+                    const targetNorm = getNormUsername(data.target);
+                    const callerNorm = registeredUser || getNormUsername(data.caller);
+                    const targetSocket = activeCalls.get(targetNorm);
+                    
+                    if (targetSocket && targetSocket.readyState === ws.OPEN) {
+                        targetSocket.send(JSON.stringify({
+                            type: 'incoming-call',
+                            caller: callerNorm,
+                            offer: data.offer,
+                            callType: data.callType
+                        }));
+                        auditLog("WS_SIGNAL", `Relaying call-user offer from ${callerNorm} to ${targetNorm}`);
+                    } else {
+                        socket.send(JSON.stringify({
+                            type: 'call-failed',
+                            reason: 'Recipient offline or unreachable on signaling server'
+                        }));
+                        auditLog("WS_SIGNAL", `Call offer failed: recipient ${targetNorm} is offline`);
+                    }
+                    break;
+                }
+                
+                case 'call-accepted': {
+                    const targetNorm = getNormUsername(data.target);
+                    const targetSocket = activeCalls.get(targetNorm);
+                    
+                    if (targetSocket && targetSocket.readyState === ws.OPEN) {
+                        targetSocket.send(JSON.stringify({
+                            type: 'call-accepted',
+                            answer: data.answer
+                        }));
+                        auditLog("WS_SIGNAL", `Relaying call-accepted answer to ${targetNorm}`);
+                    }
+                    break;
+                }
+                
+                case 'webrtc-ice': {
+                    const targetNorm = getNormUsername(data.target);
+                    const targetSocket = activeCalls.get(targetNorm);
+                    
+                    if (targetSocket && targetSocket.readyState === ws.OPEN) {
+                        targetSocket.send(JSON.stringify({
+                            type: 'webrtc-ice',
+                            candidate: data.candidate
+                        }));
+                    }
+                    break;
+                }
+                
+                case 'hangup-call': {
+                    const targetNorm = getNormUsername(data.target);
+                    const targetSocket = activeCalls.get(targetNorm);
+                    
+                    if (targetSocket && targetSocket.readyState === ws.OPEN) {
+                        targetSocket.send(JSON.stringify({
+                            type: 'hangup-call'
+                        }));
+                        auditLog("WS_SIGNAL", `Relaying hangup from ${registeredUser} to ${targetNorm}`);
+                    }
+                    break;
+                }
+                
+                default:
+                    console.warn("Unknown websocket signal type:", type);
+            }
+        } catch (e) {
+            console.error("Failed to parse websocket message payload:", e);
+        }
+    });
+    
+    socket.on('close', () => {
+        if (registeredUser && activeCalls.get(registeredUser) === socket) {
+            activeCalls.delete(registeredUser);
+            auditLog("WS_SIGNAL", `User disconnected from calling signaling: ${registeredUser}`);
+        }
+    });
+});
+
+const activeCalls = new Map();
+
+server.listen(PORT, async () => {
     console.log(`\n[SERVER] Alumni Mail backend running live at http://localhost:${PORT}`);
     console.log(`[MOBILE ACCESS] To connect securely on a mobile phone for E2EE cryptography:`);
     console.log(`   Use a secure tunnel: run 'npx localtunnel --port ${PORT}' or use ngrok, then load the HTTPS URL on your phone.\n`);
