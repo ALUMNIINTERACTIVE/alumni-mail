@@ -854,65 +854,51 @@ app.post('/api/v1/wallet/balance', async (req, res) => {
     auditLog("SELECT", `SELECT balance, tag FROM L1_ledger_state WHERE wallet_tag = '${tag}' AND associated_email = '${email}';`);
 
     const L1_RPC_URL = process.env.L1_RPC_URL;
-    
-    if (L1_RPC_URL) {
-        try {
-            // Resolve the standard PEM public key address
-            let derivedPEM = "";
-            if (tag.toUpperCase() === "@ALUMNI.SATOSHI" || tag.toUpperCase() === "SATOSHI") {
-                derivedPEM = resolveRecipientAddress("@ALUMNI.SATOSHI");
-            } else if (keyOrAddress) {
-                derivedPEM = derivePublicKeyPEM(keyOrAddress);
-            } else {
-                derivedPEM = resolveRecipientAddress(tag);
-            }
-            
-            if (derivedPEM && derivedPEM.includes("-----BEGIN PUBLIC KEY-----")) {
-                const rpcResponse = await fetch(`${L1_RPC_URL}/balance/${encodeURIComponent(derivedPEM)}`, {
-                    method: 'GET',
-                    timeout: 3000
-                });
-                if (rpcResponse.ok) {
-                    const l1Data = await rpcResponse.json();
-                    return res.json({
-                        success: true,
-                        tag: tag,
-                        balance: l1Data.balance || 0,
-                        l1_status: "LIVE_LEDGER"
-                    });
-                } else {
-                    console.warn("[L1 RPC BALANCE ERROR] Node responded with status:", rpcResponse.status);
-                }
-            } else {
-                console.warn("[L1 RPC BALANCE] Could not derive valid PEM public key from:", keyOrAddress || tag);
-            }
-        } catch (err) {
-            console.error("[L1 RPC CONNECTION ERROR] Live blockchain API query failed:", err.message);
-        }
+    if (!L1_RPC_URL) {
+        return res.status(500).json({ error: "L1_RPC_URL environment variable is not configured. Node connection required." });
     }
 
-    // SIMULATION FALLBACK (Robust demo mode when offline or L1 URL is unset)
-    let simulatedBalance = 2500;
     try {
-        // Compute simulated balance strictly and stably from the unique registered wallet tag
-        // This ensures consistent balance irrespective of watch-only vs private key link mode
-        let seedString = tag.trim().toUpperCase();
-        let numericHash = 0;
-        for (let i = 0; i < seedString.length; i++) {
-            numericHash += seedString.charCodeAt(i);
+        // Resolve the standard PEM public key address
+        let derivedPEM = "";
+        if (tag.toUpperCase() === "@ALUMNI.SATOSHI" || tag.toUpperCase() === "SATOSHI") {
+            derivedPEM = resolveRecipientAddress("@ALUMNI.SATOSHI");
+        } else if (keyOrAddress) {
+            derivedPEM = derivePublicKeyPEM(keyOrAddress);
+        } else {
+            derivedPEM = resolveRecipientAddress(tag);
         }
-        simulatedBalance = (numericHash * 23) % 25000 + 100;
-    } catch (e) {}
-
-    // Emulate node network round-trip handshake latency (120ms)
-    await new Promise(resolve => setTimeout(resolve, 120));
-
-    res.json({
-        success: true,
-        tag: tag,
-        balance: simulatedBalance,
-        l1_status: "OFFLINE_SIMULATION"
-    });
+        
+        if (derivedPEM && derivedPEM.includes("-----BEGIN PUBLIC KEY-----")) {
+            const rpcResponse = await fetch(`${L1_RPC_URL}/balance/${encodeURIComponent(derivedPEM)}`, {
+                method: 'GET',
+                timeout: 3000
+            });
+            if (rpcResponse.ok) {
+                const l1Data = await rpcResponse.json();
+                return res.json({
+                    success: true,
+                    tag: tag,
+                    balance: l1Data.balance || 0,
+                    l1_status: "LIVE_LEDGER"
+                });
+            } else {
+                const errorText = await rpcResponse.text().catch(() => "");
+                return res.status(rpcResponse.status).json({
+                    error: `L1 Node responded with status ${rpcResponse.status}: ${errorText || 'Failed to fetch balance.'}`
+                });
+            }
+        } else {
+            return res.status(400).json({
+                error: "Could not derive a valid public key address from the provided key or tag. Link a valid PEM public key or private key."
+            });
+        }
+    } catch (err) {
+        console.error("[L1 RPC CONNECTION ERROR] Live blockchain API query failed:", err.message);
+        return res.status(503).json({
+            error: `Failed to connect to the Alumni L1 Blockchain ledger: ${err.message}. Accurate ledger state is required.`
+        });
+    }
 });
 
 
@@ -937,70 +923,75 @@ app.post('/api/v1/wallet/send', async (req, res) => {
     auditLog("INSERT", `INSERT INTO L1_ledger_transactions (tx_hash, sender_tag, recipient, amount, status) VALUES ('${txHash}', '${fromTag}', '${recipient}', ${numericAmount}, 'PENDING');`);
 
     const L1_RPC_URL = process.env.L1_RPC_URL;
-    
-    if (L1_RPC_URL && pemPrivateKey && pemPrivateKey !== "READ_ONLY") {
-        try {
-            // Derive sender's public key PEM
-            const fromAddress = derivePublicKeyPEM(pemPrivateKey);
-            // Resolve recipient's public key PEM
-            const toAddress = resolveRecipientAddress(recipient);
-            
-            if (fromAddress && toAddress && fromAddress.includes("-----BEGIN PUBLIC KEY-----") && toAddress.includes("-----BEGIN PUBLIC KEY-----")) {
-                // Relaying signed transfer request to the live custom L1 node API
-                const rpcResponse = await fetch(`${L1_RPC_URL}/transaction/sign-and-send`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        privateKey: pemPrivateKey,
-                        fromAddress: fromAddress,
-                        toAddress: toAddress,
-                        amount: numericAmount
-                    }),
-                    timeout: 5000
-                });
-                
-                if (rpcResponse.ok) {
-                    const l1Data = await rpcResponse.json();
-                    const actualTxHash = l1Data.hash || txHash;
-                    auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'SUCCESS' WHERE tx_hash = '${actualTxHash}';`);
-                    
-                    // Fetch updated sender balance to return
-                    let latestBalance = 0;
-                    try {
-                        const balRes = await fetch(`${L1_RPC_URL}/balance/${encodeURIComponent(fromAddress)}`, { timeout: 2000 });
-                        const balData = await balRes.json();
-                        latestBalance = balData.balance || 0;
-                    } catch (e) {}
-                    
-                    return res.json({
-                        success: true,
-                        txHash: actualTxHash,
-                        newBalance: latestBalance,
-                        l1_status: "LIVE_LEDGER"
-                    });
-                } else {
-                    const errorData = await rpcResponse.json().catch(() => ({}));
-                    const errMsg = errorData.error || `L1 Node responded with status ${rpcResponse.status}`;
-                    auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
-                    return res.status(400).json({ error: errMsg });
-                }
-            } else {
-                console.warn("[L1 RPC SEND] Could not derive valid sender or recipient PEM public key.");
-            }
-        } catch (err) {
-            console.error("[L1 TX BROADCAST ERROR] Failed to send to L1 RPC:", err.message);
-        }
+    if (!L1_RPC_URL) {
+        return res.status(500).json({ error: "L1_RPC_URL environment variable is not configured. Node connection required." });
     }
 
-    // SIMULATION FALLBACK (Simulate block consensus time)
-    await new Promise(resolve => setTimeout(resolve, 300));
-    auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'SUCCESS' WHERE tx_hash = '${txHash}';`);
+    if (!pemPrivateKey || pemPrivateKey === "READ_ONLY") {
+        auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
+        return res.status(400).json({
+            error: "Transaction rejected: Full-access wallet link required (valid pasted PEM private key). Read-only or simulated wallets cannot initiate transfers on the live ledger."
+        });
+    }
 
-    res.json({
-        success: true,
-        txHash: txHash,
-        l1_status: "OFFLINE_SIMULATION"
-    });
+    try {
+        // Derive sender's public key PEM
+        const fromAddress = derivePublicKeyPEM(pemPrivateKey);
+        // Resolve recipient's public key PEM
+        const toAddress = resolveRecipientAddress(recipient);
+        
+        if (fromAddress && toAddress && fromAddress.includes("-----BEGIN PUBLIC KEY-----") && toAddress.includes("-----BEGIN PUBLIC KEY-----")) {
+            // Relaying signed transfer request to the live custom L1 node API
+            const rpcResponse = await fetch(`${L1_RPC_URL}/transaction/sign-and-send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    privateKey: pemPrivateKey,
+                    fromAddress: fromAddress,
+                    toAddress: toAddress,
+                    amount: numericAmount
+                }),
+                timeout: 5000
+            });
+            
+            if (rpcResponse.ok) {
+                const l1Data = await rpcResponse.json();
+                const actualTxHash = l1Data.hash || txHash;
+                auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'SUCCESS' WHERE tx_hash = '${actualTxHash}';`);
+                
+                // Fetch updated sender balance to return
+                let latestBalance = 0;
+                try {
+                    const balRes = await fetch(`${L1_RPC_URL}/balance/${encodeURIComponent(fromAddress)}`, { timeout: 2000 });
+                    const balData = await balRes.json();
+                    latestBalance = balData.balance || 0;
+                } catch (e) {}
+                
+                return res.json({
+                    success: true,
+                    txHash: actualTxHash,
+                    newBalance: latestBalance,
+                    l1_status: "LIVE_LEDGER"
+                });
+            } else {
+                const errorData = await rpcResponse.json().catch(() => ({}));
+                const errMsg = errorData.error || `L1 Node responded with status ${rpcResponse.status}`;
+                auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
+                return res.status(400).json({ error: errMsg });
+            }
+        } else {
+            auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
+            return res.status(400).json({
+                error: "Could not derive valid sender or recipient PEM public key."
+            });
+        }
+    } catch (err) {
+        console.error("[L1 TX BROADCAST ERROR] Failed to send to L1 RPC:", err.message);
+        auditLog("UPDATE", `UPDATE L1_ledger_transactions SET status = 'FAILED' WHERE tx_hash = '${txHash}';`);
+        return res.status(503).json({
+            error: `Failed to broadcast transaction to the Alumni L1 Blockchain consensus pool: ${err.message}. Accurate ledger synchronization is required.`
+        });
+    }
 });
 
 // -------------------------------------------------------------
