@@ -2067,7 +2067,15 @@ function hideCryptoOverlay() {
 // -------------------------------------------------------------
 // SECURITY AUDITOR & TRANS-LOGGER
 // -------------------------------------------------------------
-function toggleAuditorDrawer() {
+let lastAuditorToggle = 0;
+function toggleAuditorDrawer(e) {
+    if (e) {
+        e.stopPropagation();
+    }
+    const now = Date.now();
+    if (now - lastAuditorToggle < 300) return;
+    lastAuditorToggle = now;
+    
     const container = document.getElementById('auditor-drawer');
     const btn = document.getElementById('btn-toggle-auditor');
     

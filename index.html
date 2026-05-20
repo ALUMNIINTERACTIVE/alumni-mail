@@ -45,9 +45,6 @@
             <div class="auth-card glass-panel">
                 <div class="auth-header">
                     <div class="logo-container">
-                        <div class="brand-logo">
-                            <span class="logo-lock"><img src="assets/logo.png" class="logo-img" alt="Logo"></span>
-                        </div>
                         <span class="badge success">ZERO-KNOWLEDGE</span>
                     </div>
                     <h1>ALUMNI MAIL</h1>
@@ -139,7 +136,6 @@
                     <span class="hamburger-bar"></span>
                 </button>
                 <div class="mobile-brand">
-                    <span class="logo-glow"><img src="assets/logo.png" class="logo-img" alt="Logo"></span>
                     <h2>ALUMNI MAIL</h2>
                 </div>
                 <div class="mobile-right">
@@ -153,7 +149,6 @@
             <!-- LEFT NAVIGATION SIDEBAR -->
             <aside class="sidebar glass-panel">
                 <div class="brand">
-                    <div class="logo-glow"><img src="assets/logo.png" class="logo-img" alt="Logo"></div>
                     <div>
                         <h2>ALUMNI MAIL</h2>
                         <span class="badge success">E2EE ACTIVATED</span>
@@ -920,13 +915,13 @@
 
     <!-- SECTION 7: THE SECURITY AUDITOR DRAWER (INSPECTOR CONSOLE) -->
     <div id="auditor-drawer" class="auditor-container minimized">
-        <div class="auditor-header" onclick="toggleAuditorDrawer()">
+        <div class="auditor-header" onclick="toggleAuditorDrawer(event)">
             <div class="auditor-header-title">
                 <span class="auditor-pulse"></span>
                 <span>Zero-Knowledge Security Auditor & Logs</span>
             </div>
             <div class="auditor-header-actions">
-                <button id="btn-toggle-auditor" class="btn-icon-auditor">▲ Expand Console</button>
+                <button id="btn-toggle-auditor" class="btn-icon-auditor" onclick="toggleAuditorDrawer(event)">▲ Expand Console</button>
             </div>
         </div>
 
