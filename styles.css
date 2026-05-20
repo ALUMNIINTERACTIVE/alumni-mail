@@ -869,6 +869,10 @@ body {
     color: var(--text-muted);
 }
 
+.mobile-back-nav {
+    display: none;
+}
+
 .detail-active {
     width: 100%;
     height: 100%;
@@ -1286,11 +1290,21 @@ body {
     height: 100vh;
     background: rgba(6, 9, 19, 0.75);
     backdrop-filter: blur(4px);
-    z-index: 90;
+    z-index: 300; /* Sit clearly above mobile header, sidebar, and backdrops */
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    overflow-y: auto;
+}
+.modal-card {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    width: 100%;
+    animation: modalEntrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .composer-card {
     width: 100%;
@@ -1770,33 +1784,54 @@ body {
     }
     
     .email-list-pane {
-        width: 100%;
-        height: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--border-color);
-        transition: height 0.3s ease;
-        display: flex;
-        flex-direction: column;
+        width: 100% !important;
+        height: 100% !important;
+        border-right: none !important;
+        border-bottom: none !important;
+        display: flex !important;
+        flex-direction: column !important;
     }
     
+    /* Hide Inbox list completely when email is active */
     .mail-workspace:has(#email-detail-active:not(.hidden)) .email-list-pane {
-        height: 240px;
-        flex-shrink: 0;
+        display: none !important;
     }
     
     .email-detail-pane {
-        width: 100%;
-        height: 0;
-        overflow: hidden;
-        transition: height 0.3s ease;
-        display: flex;
-        flex-direction: column;
+        width: 100% !important;
+        height: 100% !important;
+        display: none !important;
+        flex-direction: column !important;
+        border-left: none !important;
     }
     
+    /* Display Email detail full-height when active */
     .mail-workspace:has(#email-detail-active:not(.hidden)) .email-detail-pane {
-        height: calc(100% - 240px);
-        flex-grow: 1;
-        overflow-y: auto;
+        display: flex !important;
+        overflow-y: auto !important;
+    }
+    
+    /* Mobile Glassy Back Navigation Bar */
+    .mobile-back-nav {
+        display: block !important;
+        margin-bottom: 12px;
+        width: 100%;
+    }
+    .back-to-list-btn {
+        width: 100%;
+        justify-content: flex-start !important;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid var(--border-color) !important;
+        color: var(--text-main) !important;
+        backdrop-filter: blur(12px) !important;
+        border-radius: 6px !important;
+        padding: 10px 14px !important;
+        transition: all 0.2s ease !important;
+    }
+    .back-to-list-btn:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-color: var(--accent-light) !important;
     }
     
     .domain-grid {

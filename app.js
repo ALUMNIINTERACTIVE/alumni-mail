@@ -1277,135 +1277,161 @@ function renderMailList() {
 }
 
 async function openEmailDetails(emailId) {
-    session.activeEmailId = emailId;
-    
-    // Highlight selected card
-    const cards = document.querySelectorAll('.email-card');
-    cards.forEach(c => c.classList.remove('active'));
-    const activeCard = document.getElementById(`mail-card-${emailId}`);
-    if (activeCard) {
-        activeCard.classList.add('active');
-        activeCard.classList.remove('unread');
-    }
-
-    const emails = window.AlumniMailDB.getEmailsForUser(session.username);
-    const email = emails.find(e => e.id === emailId);
-
-    if (!email) return;
-
-    // Mark as read in db
-    email.read = true;
-    
-    const detailEmpty = document.getElementById('email-detail-empty');
-    const detailActive = document.getElementById('email-detail-active');
-
-    detailEmpty.classList.add('hidden');
-    detailActive.classList.remove('hidden');
-
-    document.getElementById('detail-from').innerText = email.sender;
-    document.getElementById('detail-to').innerText = email.recipient;
-    document.getElementById('detail-date').innerText = new Date(email.timestamp).toLocaleString();
-
-    // Populate Ciphertext Drawer panels immediately
-    document.getElementById('cipher-payload-raw').innerText = email.encryptedPayload;
-    document.getElementById('cipher-key-raw').innerText = email.encryptedSessionKey || "Symmetric key derived via custom password";
-    
-    // Reset Views
-    document.getElementById('detail-body-decrypted').classList.remove('hidden');
-    document.getElementById('detail-body-ciphertext').classList.add('hidden');
-    document.getElementById('btn-toggle-cipher').innerText = "View Ciphertext";
-
-    // Dynamic Security Header Configuration
-    const securityBadgeCard = document.getElementById('security-badge-card');
-    const secDot = securityBadgeCard ? securityBadgeCard.querySelector('.secure-indicator-dot') : null;
-    const secTitle = document.getElementById('security-card-title');
-    const secText = document.getElementById('security-card-text');
-
-    if (email.isPasswordProtected) {
-        if (secDot) secDot.className = "secure-indicator-dot warning";
-        if (secTitle) secTitle.innerText = "[PORTAL] Password Encrypted Secure Portal";
-        if (secText) secText.innerText = "This email was secured with a custom password. To read its contents, it must be unlocked with the shared secret passphrase.";
+    try {
+        session.activeEmailId = emailId;
         
-        // Decrypted body will trigger the secure password portal popup
-        document.getElementById('detail-subject').innerText = "[SECURE] Password Protected Payload";
-        document.getElementById('detail-body-decrypted').innerHTML = `
-            <div class="alert warning text-center">
-                <strong>Password Protected Session Required</strong><br>
-                This content is locked with a custom shared password.<br><br>
-                <button class="btn primary glow" onclick="openExternalReaderModal('${email.id}')">Unlock Secure Message</button>
-            </div>
-        `;
-    } else if (!email.encryptedSessionKey) {
-        // Plaintext SMTP mock delivery
-        if (secDot) secDot.className = "secure-indicator-dot warning";
-        if (secTitle) secTitle.innerText = "[PLAINTEXT] External SMTP Delivery (Plaintext)";
-        if (secText) secText.innerText = "This message was received without cryptographic key negotiation. Content was transmitted plaintext across clear text channels.";
-        
-        // Render plaintext fields immediately
-        try {
-            const raw = JSON.parse(window.atob(email.encryptedPayload));
-            document.getElementById('detail-subject').innerText = raw.subject;
-            document.getElementById('detail-body-decrypted').innerText = raw.body;
-        } catch (e) {
-            document.getElementById('detail-subject').innerText = "Plaintext Message";
-            document.getElementById('detail-body-decrypted').innerText = email.encryptedPayload;
+        // Highlight selected card
+        const cards = document.querySelectorAll('.email-card');
+        cards.forEach(c => c.classList.remove('active'));
+        const activeCard = document.getElementById(`mail-card-${emailId}`);
+        if (activeCard) {
+            activeCard.classList.add('active');
+            activeCard.classList.remove('unread');
         }
-    } else {
-        // Full standard E2EE
-        if (secDot) secDot.className = "secure-indicator-dot secure";
-        if (secTitle) secTitle.innerText = "[E2EE] End-to-End Encrypted (E2EE)";
-        if (secText) secText.innerText = "This message was encrypted on the sender's client and decrypted locally in your browser using your derived RSA private key. The server only sees base64 ciphertext.";
 
-        // Execute actual browser-native decryption
-        try {
-            // Find appropriate key: user has a primary address, but might also have custom aliases!
-            // Let's resolve the exact recipient public key to match the active private key.
-            let privateKeyToUse = session.privateKey;
+        const emails = window.AlumniMailDB.getEmailsForUser(session.username);
+        const email = emails.find(e => e.id === emailId);
+
+        if (!email) return;
+
+        // Mark as read in db
+        email.read = true;
+        
+        const detailEmpty = document.getElementById('email-detail-empty');
+        const detailActive = document.getElementById('email-detail-active');
+
+        detailEmpty.classList.add('hidden');
+        detailActive.classList.remove('hidden');
+
+        document.getElementById('detail-from').innerText = email.sender;
+        document.getElementById('detail-to').innerText = email.recipient;
+        document.getElementById('detail-date').innerText = new Date(email.timestamp).toLocaleString();
+
+        // Populate Ciphertext Drawer panels immediately
+        document.getElementById('cipher-payload-raw').innerText = email.encryptedPayload;
+        document.getElementById('cipher-key-raw').innerText = email.encryptedSessionKey || "Symmetric key derived via custom password";
+        
+        // Reset Views
+        document.getElementById('detail-body-decrypted').classList.remove('hidden');
+        document.getElementById('detail-body-ciphertext').classList.add('hidden');
+        document.getElementById('btn-toggle-cipher').innerText = "View Ciphertext";
+
+        // Dynamic Security Header Configuration
+        const securityBadgeCard = document.getElementById('security-badge-card');
+        const secDot = securityBadgeCard ? securityBadgeCard.querySelector('.secure-indicator-dot') : null;
+        const secTitle = document.getElementById('security-card-title');
+        const secText = document.getElementById('security-card-text');
+
+        if (email.isPasswordProtected) {
+            if (secDot) secDot.className = "secure-indicator-dot warning";
+            if (secTitle) secTitle.innerText = "[PORTAL] Password Encrypted Secure Portal";
+            if (secText) secText.innerText = "This email was secured with a custom password. To read its contents, it must be unlocked with the shared secret passphrase.";
             
-            const normRecipient = email.recipient.toLowerCase().trim();
-            const normPrimary = session.username.toLowerCase().trim();
-
-            if (normRecipient !== normPrimary) {
-                // The email was sent to one of the user's custom aliases!
-                const aliases = window.AlumniMailDB.getAliasesForUser(session.username);
-                const matchedAlias = aliases.find(a => a.email === normRecipient);
-                
-                if (matchedAlias) {
-                    // Decrypt the alias's private key first using KDK
-                    window.AlumniMailDB.auditLog("DECRYPT ALIAS KEY", `Decrypting alias private key for '${normRecipient}' using in-memory master KDK.`);
-                    privateKeyToUse = await window.AlumniMailCrypto.decryptPrivateKey(
-                        matchedAlias.encPrivateKey.ciphertext,
-                        matchedAlias.encPrivateKey.iv,
-                        session.kdk
-                    );
-                }
-            }
-
-            const decrypted = await window.AlumniMailCrypto.decryptEmail(
-                email.encryptedPayload,
-                email.encryptedSessionKey,
-                email.iv,
-                privateKeyToUse
-            );
-
-            document.getElementById('detail-subject').innerText = decrypted.subject;
-            document.getElementById('detail-body-decrypted').innerText = decrypted.body;
-
-            // Highlight decryption transaction inside Database Inspector
-            window.AlumniMailDB.auditLog("DECRYPT SUCCESS", `Successfully decrypted E2EE payload for ${email.recipient}`);
-
-        } catch (err) {
-            console.error(err);
-            document.getElementById('detail-subject').innerText = "[ERROR] Decryption Failure";
+            // Decrypted body will trigger the secure password portal popup
+            document.getElementById('detail-subject').innerText = "[SECURE] Password Protected Payload";
             document.getElementById('detail-body-decrypted').innerHTML = `
-                <div class="alert warning">
-                    <strong>Cryptographic Decryption Error</strong><br>
-                    Unable to decrypt this payload. This could happen if the message was encrypted with a different key, or if your key pair was rotated.<br><br>
-                    Details: ${err.message}
+                <div class="alert warning text-center">
+                    <strong>Password Protected Session Required</strong><br>
+                    This content is locked with a custom shared password.<br><br>
+                    <button class="btn primary glow" onclick="openExternalReaderModal('${email.id}')">Unlock Secure Message</button>
                 </div>
             `;
+        } else if (!email.encryptedSessionKey) {
+            // Plaintext SMTP mock delivery
+            if (secDot) secDot.className = "secure-indicator-dot warning";
+            if (secTitle) secTitle.innerText = "[PLAINTEXT] External SMTP Delivery (Plaintext)";
+            if (secText) secText.innerText = "This message was received without cryptographic key negotiation. Content was transmitted plaintext across clear text channels.";
+            
+            // Render plaintext fields immediately
+            try {
+                const raw = JSON.parse(window.atob(email.encryptedPayload));
+                document.getElementById('detail-subject').innerText = raw.subject;
+                document.getElementById('detail-body-decrypted').innerText = raw.body;
+            } catch (e) {
+                document.getElementById('detail-subject').innerText = "Plaintext Message";
+                document.getElementById('detail-body-decrypted').innerText = email.encryptedPayload;
+            }
+        } else {
+            // Full standard E2EE
+            if (secDot) secDot.className = "secure-indicator-dot secure";
+            if (secTitle) secTitle.innerText = "[E2EE] End-to-End Encrypted (E2EE)";
+            if (secText) secText.innerText = "This message was encrypted on the sender's client and decrypted locally in your browser using your derived RSA private key. The server only sees base64 ciphertext.";
+
+            // Execute actual browser-native decryption
+            try {
+                // Find appropriate key: user has a primary address, but might also have custom aliases!
+                // Let's resolve the exact recipient public key to match the active private key.
+                let privateKeyToUse = session.privateKey;
+                
+                const normRecipient = email.recipient.toLowerCase().trim();
+                const normPrimary = session.username.toLowerCase().trim();
+
+                if (normRecipient !== normPrimary) {
+                    // The email was sent to one of the user's custom aliases!
+                    const aliases = window.AlumniMailDB.getAliasesForUser(session.username);
+                    const matchedAlias = aliases.find(a => a.email === normRecipient);
+                    
+                    if (matchedAlias) {
+                        // Decrypt the alias's private key first using KDK
+                        window.AlumniMailDB.auditLog("DECRYPT ALIAS KEY", `Decrypting alias private key for '${normRecipient}' using in-memory master KDK.`);
+                        privateKeyToUse = await window.AlumniMailCrypto.decryptPrivateKey(
+                            matchedAlias.encPrivateKey.ciphertext,
+                            matchedAlias.encPrivateKey.iv,
+                            session.kdk
+                        );
+                    }
+                }
+
+                const decrypted = await window.AlumniMailCrypto.decryptEmail(
+                    email.encryptedPayload,
+                    email.encryptedSessionKey,
+                    email.iv,
+                    privateKeyToUse
+                );
+
+                document.getElementById('detail-subject').innerText = decrypted.subject;
+                document.getElementById('detail-body-decrypted').innerText = decrypted.body;
+
+                // Highlight decryption transaction inside Database Inspector
+                window.AlumniMailDB.auditLog("DECRYPT SUCCESS", `Successfully decrypted E2EE payload for ${email.recipient}`);
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('detail-subject').innerText = "[ERROR] Decryption Failure";
+                document.getElementById('detail-body-decrypted').innerHTML = `
+                    <div class="alert warning">
+                        <strong>Cryptographic Decryption Error</strong><br>
+                        Unable to decrypt this payload. This could happen if the message was encrypted with a different key, or if your key pair was rotated.<br><br>
+                        Details: ${err.message}
+                    </div>
+                `;
+            }
+        }
+    } catch (globalErr) {
+        console.error("GLOBAL EMAIL VIEWER CRASH:", globalErr);
+        try {
+            document.getElementById('detail-subject').innerText = "[ERROR] UI Error";
+            document.getElementById('detail-body-decrypted').innerHTML = `
+                <div class="alert warning">
+                    <strong>An unexpected error occurred in the mail viewer:</strong><br>
+                    ${globalErr.message}<br><br>
+                    <pre style="text-align: left; font-size: 0.75rem; white-space: pre-wrap; word-break: break-all;">${globalErr.stack}</pre>
+                </div>
+            `;
+        } catch (e) {
+            console.error("Fallback reporting failed:", e);
         }
     }
+}
+
+function backToEmailList() {
+    session.activeEmailId = null;
+    document.querySelectorAll('.email-card').forEach(c => c.classList.remove('active'));
+    
+    const activeEl = document.getElementById('email-detail-active');
+    const emptyEl = document.getElementById('email-detail-empty');
+    if (activeEl) activeEl.classList.add('hidden');
+    if (emptyEl) emptyEl.classList.remove('hidden');
 }
 
 function toggleCiphertext() {
