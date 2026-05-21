@@ -229,7 +229,7 @@ app.post('/api/auth/register', (req, res) => {
 
     const prefix = normUser.split('@')[0].toLowerCase();
     const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
-    const resolvedTier = isBypass ? 'Ultimate' : 'Free';
+    const resolvedTier = isBypass ? 'Elite' : 'Free';
 
     db.users[normUser] = {
         username: normUser,
@@ -291,12 +291,12 @@ app.post('/api/auth/login', (req, res) => {
 
     const prefix = normUser.split('@')[0].toLowerCase();
     const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
-    const resolvedTier = isBypass ? 'Ultimate' : (user.tier || 'Free');
+    const resolvedTier = isBypass ? 'Elite' : (user.tier || 'Free');
 
     // Auto-assign virtual number to bypass profiles if missing
     if (isBypass && !user.virtualNumber) {
         user.virtualNumber = '+18449521385';
-        user.tier = 'Ultimate';
+        user.tier = 'Elite';
         saveDB(db);
     }
 
@@ -476,7 +476,7 @@ app.post('/api/auth/webauthn/login-verify', (req, res) => {
 
         const prefix = normUser.split('@')[0].toLowerCase();
         const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
-        const resolvedTier = isBypass ? 'Ultimate' : (foundUser.tier || 'Free');
+        const resolvedTier = isBypass ? 'Elite' : (foundUser.tier || 'Free');
 
         res.json({
             success: true,
@@ -1111,9 +1111,11 @@ app.post('/api/v1/subscription/create-checkout-session', async (req, res) => {
         try {
             const stripe = require('stripe')(STRIPE_SECRET_KEY);
             const prices = {
+                'Plus': { 'monthly': 199, 'yearly': 1900 },
                 'Pro': { 'monthly': 399, 'yearly': 3800 },
+                'Ultimate': { 'monthly': 999, 'yearly': 9600 },
                 'Enterprise': { 'monthly': 1500, 'yearly': 14400 },
-                'Ultimate': { 'monthly': 999, 'yearly': 9600 }
+                'Elite': { 'monthly': 2500, 'yearly': 24000 }
             };
             
             const amountInCents = prices[tier] ? prices[tier][billingCycle] : 3800;

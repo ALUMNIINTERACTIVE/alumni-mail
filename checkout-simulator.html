@@ -149,9 +149,11 @@
 
         // Pricing lookup
         const prices = {
+            'Plus': { 'monthly': '$1.99', 'yearly': '$19.00' },
             'Pro': { 'monthly': '$3.99', 'yearly': '$38.00' },
+            'Ultimate': { 'monthly': '$9.99', 'yearly': '$96.00' },
             'Enterprise': { 'monthly': '$15.00', 'yearly': '$144.00' },
-            'Ultimate': { 'monthly': '$9.99', 'yearly': '$96.00' }
+            'Elite': { 'monthly': '$25.00', 'yearly': '$240.00' }
         };
         const price = prices[tier] ? prices[tier][billingCycle] : '$38.00';
         document.getElementById('display-price').innerText = price;

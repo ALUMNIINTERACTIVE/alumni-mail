@@ -2283,20 +2283,20 @@ body {
 /* Pricing Grid Enhancements */
 .pricing-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     width: 100%;
     margin-top: 16px;
 }
-@media (max-width: 1024px) and (min-width: 640px) {
+@media (max-width: 1024px) and (min-width: 768px) {
     .pricing-grid {
         grid-template-columns: repeat(2, 1fr);
     }
 }
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     .pricing-grid {
         grid-template-columns: 1fr;
-        max-height: 70vh;
+        max-height: 60vh;
         overflow-y: auto;
         padding-right: 4px;
     }
@@ -2547,5 +2547,44 @@ body {
 }
 .activity-item:hover {
     background: rgba(255, 255, 255, 0.06);
+}
+
+/* -----------------------------------------
+   MOBILE RESPONSIVE OVERRIDES & iOS AUTO-ZOOM PREVENTION
+   ----------------------------------------- */
+@media (max-width: 768px) {
+    /* Prevent iOS auto-zooming on inputs, selects, and textareas */
+    .input-field,
+    .input-mercury,
+    .composer-row .input-field,
+    .composer-row select,
+    select,
+    textarea,
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="tel"] {
+        font-size: 16px !important;
+    }
+    
+    /* Make Phone Dialer tab stack vertically instead of squishing */
+    .phone-dialer-layout {
+        flex-direction: column !important;
+        align-items: center !important;
+        width: 100% !important;
+        gap: 24px !important;
+    }
+    
+    /* Allow the T9 keypad column and Recent Activity column to expand on mobile */
+    .phone-dialer-layout > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+
+    #phone-logs-container {
+        max-height: 280px;
+        overflow-y: auto;
+    }
 }
 

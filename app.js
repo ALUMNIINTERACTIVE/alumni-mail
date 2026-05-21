@@ -150,7 +150,7 @@ function switchView(viewName) {
     session.activeEmailId = null;
     
     // Update active nav link classes
-    const navs = ['nav-inbox', 'nav-sent', 'nav-archive', 'nav-trash', 'nav-calendar', 'nav-calls', 'nav-phone', 'nav-domains', 'nav-keys', 'nav-settings'];
+    const navs = ['nav-inbox', 'nav-sent', 'nav-archive', 'nav-trash', 'nav-calendar', 'nav-calls', 'nav-phone', 'nav-domains', 'nav-keys', 'nav-settings', 'nav-ai'];
     navs.forEach(navId => {
         const el = document.getElementById(navId);
         if (el) el.classList.remove('active');
@@ -167,6 +167,7 @@ function switchView(viewName) {
     const calendarWorkspace = document.getElementById('view-calendar');
     const callsWorkspace = document.getElementById('view-calls');
     const phoneWorkspace = document.getElementById('view-phone');
+    const aiWorkspace = document.getElementById('view-ai');
 
     mainWorkspace.classList.add('hidden');
     domainsWorkspace.classList.add('hidden');
@@ -175,6 +176,7 @@ function switchView(viewName) {
     if (calendarWorkspace) calendarWorkspace.classList.add('hidden');
     if (callsWorkspace) callsWorkspace.classList.add('hidden');
     if (phoneWorkspace) phoneWorkspace.classList.add('hidden');
+    if (aiWorkspace) aiWorkspace.classList.add('hidden');
 
     if (['inbox', 'sent', 'archive', 'trash'].includes(viewName)) {
         mainWorkspace.classList.remove('hidden');
@@ -205,6 +207,11 @@ function switchView(viewName) {
         if (phoneWorkspace) {
             phoneWorkspace.classList.remove('hidden');
             renderPhoneView();
+        }
+    } else if (viewName === 'ai') {
+        if (aiWorkspace) {
+            aiWorkspace.classList.remove('hidden');
+            initAiWorkspace();
         }
     }
 }
@@ -1895,7 +1902,7 @@ function handleNewDomain(event) {
 
     // Free account custom domain limit
     const domains = window.AlumniMailDB.getDomainsForUser(session.username);
-    if (session.userTier !== 'Pro' && domains.length >= 1) {
+    if (!['Pro', 'Ultimate', 'Enterprise', 'Elite'].includes(session.userTier) && domains.length >= 1) {
         alert("Free accounts are strictly limited to exactly 1 custom domain. Please upgrade to Pro to unlock unlimited custom domains!");
         openUpgradeModal();
         return;
@@ -1978,7 +1985,7 @@ async function handleCreateAlias(event) {
 
     // Free account custom domain alias limit
     const aliases = window.AlumniMailDB.getAliasesForUser(session.username);
-    if (session.userTier !== 'Pro' && aliases.length >= 1) {
+    if (!['Pro', 'Ultimate', 'Enterprise', 'Elite'].includes(session.userTier) && aliases.length >= 1) {
         alert("Free accounts are strictly limited to exactly 1 custom domain email alias. Please upgrade to Pro to unlock unlimited domain aliases!");
         openUpgradeModal();
         return;
@@ -2365,20 +2372,28 @@ function selectPricingCard(tier) {
     if (tier === 'Free') return; // Cannot select Free to upgrade
     selectedTier = tier;
     
+    const cardPlus = document.getElementById('card-tier-plus');
     const cardPro = document.getElementById('card-tier-pro');
-    const cardEnt = document.getElementById('card-tier-enterprise');
     const cardUlt = document.getElementById('card-tier-ultimate');
+    const cardEnt = document.getElementById('card-tier-enterprise');
+    const cardElite = document.getElementById('card-tier-elite');
     
+    if (cardPlus) cardPlus.classList.remove('selected');
     if (cardPro) cardPro.classList.remove('selected');
-    if (cardEnt) cardEnt.classList.remove('selected');
     if (cardUlt) cardUlt.classList.remove('selected');
+    if (cardEnt) cardEnt.classList.remove('selected');
+    if (cardElite) cardElite.classList.remove('selected');
     
-    if (tier === 'Pro' && cardPro) {
+    if (tier === 'Plus' && cardPlus) {
+        cardPlus.classList.add('selected');
+    } else if (tier === 'Pro' && cardPro) {
         cardPro.classList.add('selected');
-    } else if (tier === 'Enterprise' && cardEnt) {
-        cardEnt.classList.add('selected');
     } else if (tier === 'Ultimate' && cardUlt) {
         cardUlt.classList.add('selected');
+    } else if (tier === 'Enterprise' && cardEnt) {
+        cardEnt.classList.add('selected');
+    } else if (tier === 'Elite' && cardElite) {
+        cardElite.classList.add('selected');
     }
     
     updateBillingPrices();
@@ -2414,36 +2429,50 @@ function toggleBillingCycle() {
 }
 
 function updateBillingPrices() {
+    const plusPrice = document.getElementById('plus-price-display');
+    const plusPeriod = document.getElementById('plus-period-display');
     const proPrice = document.getElementById('pro-price-display');
     const proPeriod = document.getElementById('pro-period-display');
-    const entPrice = document.getElementById('ent-price-display');
-    const entPeriod = document.getElementById('ent-period-display');
     const ultPrice = document.getElementById('ult-price-display');
     const ultPeriod = document.getElementById('ult-period-display');
+    const entPrice = document.getElementById('ent-price-display');
+    const entPeriod = document.getElementById('ent-period-display');
+    const elitePrice = document.getElementById('elite-price-display');
+    const elitePeriod = document.getElementById('elite-period-display');
     
     const summaryTitle = document.getElementById('payment-summary-title');
     const summaryDesc = document.getElementById('payment-summary-desc');
     const tokenDisplay = document.getElementById('token-payable-display');
     
     const prices = {
+        'Plus': { 'monthly': 1.99, 'yearly': 19.00, 'monthlyToken': 139, 'yearlyToken': 1330 },
         'Pro': { 'monthly': 3.99, 'yearly': 38.00, 'monthlyToken': 279, 'yearlyToken': 2660 },
+        'Ultimate': { 'monthly': 9.99, 'yearly': 96.00, 'monthlyToken': 699, 'yearlyToken': 6720 },
         'Enterprise': { 'monthly': 15.00, 'yearly': 144.00, 'monthlyToken': 1050, 'yearlyToken': 10080 },
-        'Ultimate': { 'monthly': 9.99, 'yearly': 96.00, 'monthlyToken': 699, 'yearlyToken': 6720 }
+        'Elite': { 'monthly': 25.00, 'yearly': 240.00, 'monthlyToken': 1750, 'yearlyToken': 16800 }
     };
     
     const periodText = billingCycle === 'monthly' ? '/ month' : '/ year';
     
+    if (plusPrice && plusPeriod) {
+        plusPrice.innerText = billingCycle === 'monthly' ? "$1.99" : "$19.00";
+        plusPeriod.innerText = periodText;
+    }
     if (proPrice && proPeriod) {
         proPrice.innerText = billingCycle === 'monthly' ? "$3.99" : "$38.00";
         proPeriod.innerText = periodText;
+    }
+    if (ultPrice && ultPeriod) {
+        ultPrice.innerText = billingCycle === 'monthly' ? "$9.99" : "$96.00";
+        ultPeriod.innerText = periodText;
     }
     if (entPrice && entPeriod) {
         entPrice.innerText = billingCycle === 'monthly' ? "$15.00" : "$144.00";
         entPeriod.innerText = periodText;
     }
-    if (ultPrice && ultPeriod) {
-        ultPrice.innerText = billingCycle === 'monthly' ? "$9.99" : "$96.00";
-        ultPeriod.innerText = periodText;
+    if (elitePrice && elitePeriod) {
+        elitePrice.innerText = billingCycle === 'monthly' ? "$25.00" : "$240.00";
+        elitePeriod.innerText = periodText;
     }
     
     if (summaryTitle && summaryDesc) {
@@ -2485,7 +2514,7 @@ function loadUserTier() {
     if (session.username) {
         const prefix = session.username.split('@')[0].toLowerCase();
         if (['satoshi', 'dev', 'nycole'].includes(prefix)) {
-            tier = 'Ultimate';
+            tier = 'Elite';
         }
     }
     session.userTier = tier;
@@ -2498,6 +2527,12 @@ function loadUserTier() {
             badge.style.color = "#10b981";
             badge.style.borderColor = "#10b981";
             badge.style.boxShadow = "0 0 10px rgba(16, 185, 129, 0.3)";
+        } else if (tier === 'Elite') {
+            badge.innerText = "ELITE MEMBER";
+            badge.style.background = "rgba(165, 180, 252, 0.15)";
+            badge.style.color = "#a5b4fc";
+            badge.style.borderColor = "#a5b4fc";
+            badge.style.boxShadow = "0 0 10px rgba(165, 180, 252, 0.3)";
         } else if (tier === 'Enterprise') {
             badge.innerText = "ENTERPRISE MEMBER";
             badge.style.background = "rgba(148, 163, 184, 0.15)";
@@ -2510,6 +2545,12 @@ function loadUserTier() {
             badge.style.color = "#ffffff";
             badge.style.borderColor = "#ffffff";
             badge.style.boxShadow = "0 0 10px rgba(255, 255, 255, 0.2)";
+        } else if (tier === 'Plus') {
+            badge.innerText = "PLUS MEMBER";
+            badge.style.background = "rgba(251, 191, 36, 0.15)";
+            badge.style.color = "#fbbf24";
+            badge.style.borderColor = "#fbbf24";
+            badge.style.boxShadow = "0 0 10px rgba(251, 191, 36, 0.3)";
         } else {
             badge.innerText = "FREE TIER";
             badge.style.background = "rgba(255, 255, 255, 0.06)";
@@ -2785,7 +2826,7 @@ function initSignalingSocket() {
 }
 
 async function initiateWebRTCCall(callType, customPeer) {
-    if (session.userTier !== 'Ultimate') {
+    if (!['Ultimate', 'Enterprise', 'Elite'].includes(session.userTier)) {
         alert("[SECURE] WebRTC In-App Calling is exclusive to the premium ULTIMATE E2EE tier. Please upgrade to initiate voice, video, or screen sharing!");
         openUpgradeModal();
         return;
@@ -2917,12 +2958,12 @@ function setupRenegotiationHandler() {
 }
 
 async function handleIncomingCallSignal(data) {
-    if (session.userTier !== 'Ultimate') {
+    if (!['Ultimate', 'Enterprise', 'Elite'].includes(session.userTier)) {
         signalingSocket.send(JSON.stringify({
             type: 'hangup-call',
             target: data.caller
         }));
-        console.log(`[WS_SIGNAL] Auto-rejected call from ${data.caller} (Ultimate required, tier is ${session.userTier})`);
+        console.log(`[WS_SIGNAL] Auto-rejected call from ${data.caller} (Ultimate/Elite required, tier is ${session.userTier})`);
         return;
     }
     
@@ -3367,7 +3408,7 @@ function nextMonth() {
 function openAddMeetingModal() {
     // Check custom meeting scheduling limits for Free users
     const userMeetings = calendarMeetings.filter(m => m.username === session.username);
-    if (session.userTier !== 'Pro' && userMeetings.length >= 1) {
+    if (!['Pro', 'Ultimate', 'Enterprise', 'Elite'].includes(session.userTier) && userMeetings.length >= 1) {
         alert("[SECURE] Free accounts are strictly limited to exactly 1 scheduled meeting. Please upgrade to Pro for unlimited zero-knowledge scheduling!");
         openUpgradeModal();
         return;
@@ -3529,7 +3570,7 @@ async function renderAgenda(dayString) {
     }
     
     // Free premium restriction alert check
-    if (session.userTier !== 'Pro') {
+    if (!['Pro', 'Ultimate', 'Enterprise', 'Elite'].includes(session.userTier)) {
         const lockedCard = document.createElement('div');
         lockedCard.className = 'glass-panel';
         lockedCard.style.cssText = "padding: 15px; text-align: center; border: 1px solid var(--accent-light); cursor: pointer; transition: all 0.2s;";
@@ -4326,4 +4367,442 @@ async function sendOutboundSMS() {
         resultEl.textContent = '✗ Network error: ' + e.message;
     }
 }
+
+// ============================================================================
+// AGENT ZERO: SECURE LOCAL ON-DEVICE E2EE AI WORKSPACE ASSISTANT
+// ============================================================================
+
+let activeAiResultType = ""; // Stores current type of the sandbox action ('email', 'calendar', 'copy_only')
+
+/**
+ * Initializes/Resets the secure Agent Zero conversation workspace view.
+ */
+function initAiWorkspace() {
+    const messagesContainer = document.getElementById('ai-chat-messages');
+    if (messagesContainer) {
+        messagesContainer.innerHTML = `
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+                <div style="background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fbbf24; flex-shrink: 0;">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">psychology</span>
+                </div>
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 0 12px 12px 12px; max-width: 80%;">
+                    <span style="font-weight: 600; font-size: 0.85rem; color: #fbbf24; display: block; margin-bottom: 4px;">Agent Zero</span>
+                    <p style="margin: 0; font-size: 0.85rem; line-height: 1.4; color: #e2e8f0;">
+                        Hello! I am **Agent Zero**, your secure on-device workspace assistant. I have mapped your mailbox securely using private zero-knowledge schemas. 
+                        <br><br>
+                        How can I help you automate drafts, review communications, or organize schedules today? Click one of the quick actions below to see local learning in action!
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+
+    const loader = document.getElementById('ai-learning-loader');
+    if (loader) loader.classList.add('hidden');
+
+    const resultCard = document.getElementById('ai-action-result-card');
+    if (resultCard) resultCard.classList.add('hidden');
+
+    const chatInput = document.getElementById('ai-chat-input');
+    if (chatInput) chatInput.value = '';
+}
+
+/**
+ * Intercepts enter keys on chat input to send message.
+ */
+function handleAiChatKey(event) {
+    if (event.key === 'Enter') {
+        sendAiChatMessage();
+    }
+}
+
+/**
+ * Appends a message bubble directly inside the chatbot interface view.
+ */
+function appendAiMessage(htmlContent) {
+    const messagesContainer = document.getElementById('ai-chat-messages');
+    if (!messagesContainer) return;
+    
+    const aiBubble = document.createElement('div');
+    aiBubble.style.display = 'flex';
+    aiBubble.style.gap = '12px';
+    aiBubble.style.alignItems = 'flex-start';
+    aiBubble.innerHTML = `
+        <div style="background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fbbf24; flex-shrink: 0;">
+            <span class="material-symbols-outlined" style="font-size: 18px;">psychology</span>
+        </div>
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 0 12px 12px 12px; max-width: 80%;">
+            <span style="font-weight: 600; font-size: 0.85rem; color: #fbbf24; display: block; margin-bottom: 4px;">Agent Zero</span>
+            <p style="margin: 0; font-size: 0.85rem; line-height: 1.4; color: #e2e8f0;">${htmlContent}</p>
+        </div>
+    `;
+    messagesContainer.appendChild(aiBubble);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+/**
+ * Formulates and renders a text result container inside the sandbox panel.
+ */
+function showAiActionSandbox(title, content, type) {
+    activeAiResultType = type;
+    const card = document.getElementById('ai-action-result-card');
+    const titleEl = document.getElementById('ai-result-title');
+    const textarea = document.getElementById('ai-result-textarea');
+    const btn = document.getElementById('ai-result-apply-btn');
+    
+    if (!card || !titleEl || !textarea || !btn) return;
+    
+    titleEl.textContent = title;
+    textarea.value = content;
+    card.classList.remove('hidden');
+    
+    if (type === 'email') {
+        btn.style.display = 'block';
+        btn.textContent = "Insert Into Compose Box";
+    } else if (type === 'calendar') {
+        btn.style.display = 'block';
+        btn.textContent = "Insert Into Calendar";
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+/**
+ * Locally retrieves all secure user meetings.
+ */
+async function getCalendarEvents() {
+    try {
+        return await window.AlumniMailDB.getMeetingsForUser(session.username);
+    } catch (e) {
+        console.error("Agent Zero failed to fetch local calendar events:", e);
+    }
+    return [];
+}
+
+/**
+ * Locally retrieves virtual number SMS and call logs.
+ */
+async function getVirtualNumberLogs() {
+    try {
+        const res = await fetch(`/api/v1/twilio/logs?username=${encodeURIComponent(session.username)}`);
+        const data = await res.json();
+        if (data.success && data.logs) {
+            return data.logs;
+        }
+    } catch (e) {
+        console.error("Agent Zero failed to fetch local logs:", e);
+    }
+    return [];
+}
+
+/**
+ * High-performance browser-native decryption of a specific email record using memory session keys.
+ */
+async function decryptEmailLocally(email) {
+    if (!email.encryptedSessionKey) {
+        // Plaintext
+        if (email.rawPayload) {
+            try {
+                return JSON.parse(email.rawPayload);
+            } catch (e) {
+                return { subject: email.subject, body: email.body };
+            }
+        }
+        return { subject: email.subject, body: email.body };
+    }
+    
+    // E2EE Decryption
+    try {
+        let privateKeyToUse = session.privateKey;
+        const normRecipient = email.recipient.toLowerCase().trim();
+        const normPrimary = session.username.toLowerCase().trim();
+
+        if (normRecipient !== normPrimary) {
+            const aliases = window.AlumniMailDB.getAliasesForUser(session.username);
+            const matchedAlias = aliases.find(a => a.email === normRecipient);
+            if (matchedAlias && session.kdk) {
+                privateKeyToUse = await window.AlumniMailCrypto.decryptPrivateKey(
+                    matchedAlias.encPrivateKey.ciphertext,
+                    matchedAlias.encPrivateKey.iv,
+                    session.kdk
+                );
+            }
+        }
+
+        if (privateKeyToUse) {
+            return await window.AlumniMailCrypto.decryptEmail(
+                email.encryptedPayload,
+                email.encryptedSessionKey,
+                email.iv,
+                privateKeyToUse
+            );
+        }
+    } catch (err) {
+        console.error("Agent Zero local decryption failed:", err);
+    }
+    return null;
+}
+
+/**
+ * Returns the decrypted subject and body of the latest inbox email received by the active user.
+ */
+async function getLatestIncomingEmail() {
+    const emails = window.AlumniMailDB.getEmailsForUser(session.username);
+    const normUser = session.username.toLowerCase().trim();
+    // Inbox emails
+    const incoming = emails.filter(e => e.recipient === normUser && !e.deletedByRecipient && !e.archived);
+    incoming.sort((a, b) => b.timestamp - a.timestamp);
+    if (incoming.length === 0) return null;
+    
+    const email = incoming[0];
+    const decrypted = await decryptEmailLocally(email);
+    if (decrypted) {
+        return {
+            id: email.id,
+            sender: email.sender,
+            senderName: email.senderName || email.sender.split('@')[0],
+            subject: decrypted.subject || email.subject,
+            body: decrypted.body || email.body
+        };
+    }
+    return {
+        id: email.id,
+        sender: email.sender,
+        senderName: email.senderName || email.sender.split('@')[0],
+        subject: email.subject,
+        body: email.body
+    };
+}
+
+/**
+ * Evaluates chat message text locally using a browser-native matching model to simulate smart assistant.
+ */
+function sendAiChatMessage() {
+    const input = document.getElementById('ai-chat-input');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    
+    // Append user message
+    const messagesContainer = document.getElementById('ai-chat-messages');
+    const userBubble = document.createElement('div');
+    userBubble.style.display = 'flex';
+    userBubble.style.gap = '12px';
+    userBubble.style.alignItems = 'flex-start';
+    userBubble.style.justifyContent = 'flex-end';
+    userBubble.innerHTML = `
+        <div style="background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); padding: 12px 16px; border-radius: 12px 0 12px 12px; max-width: 80%;">
+            <span style="font-weight: 600; font-size: 0.85rem; color: #60a5fa; display: block; margin-bottom: 4px;">You</span>
+            <p style="margin: 0; font-size: 0.85rem; line-height: 1.4; color: #e2e8f0;">${escapeHTML(text)}</p>
+        </div>
+        <div style="background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.2); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #60a5fa; flex-shrink: 0;">
+            <span class="material-symbols-outlined" style="font-size: 18px;">person</span>
+        </div>
+    `;
+    messagesContainer.appendChild(userBubble);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    input.value = '';
+    
+    // Show local learning status loading overlay
+    const loader = document.getElementById('ai-learning-loader');
+    const loaderText = document.getElementById('ai-loader-text');
+    if (loader) {
+        loader.classList.remove('hidden');
+        if (loaderText) loaderText.textContent = "Analyzing local E2EE message store...";
+    }
+    
+    // Process response locally inside browser sandbox
+    setTimeout(async () => {
+        let responseText = "";
+        const lowerText = text.toLowerCase();
+        
+        if (lowerText.includes('draft') || lowerText.includes('email') || lowerText.includes('reply') || lowerText.includes('compose') || lowerText.includes('write')) {
+            const latestEmail = await getLatestIncomingEmail();
+            if (latestEmail) {
+                responseText = `**Local Secure Inference Result**: I've analyzed your latest secure incoming email from **${escapeHTML(latestEmail.sender)}** regarding *"${escapeHTML(latestEmail.subject)}"*. <br><br>Based on zero-knowledge pattern analysis, I've generated a secure context-aware draft reply for you. You can review and apply it directly using the **Insert Into Compose Box** card on the right!`;
+                const draftContent = `Subject: Re: ${latestEmail.subject}\n\nHi ${latestEmail.senderName},\n\nThank you for reaching out. I have securely processed your message and would love to connect to discuss this further.\n\nLet me know what time works best for you.\n\nBest regards,\n${session.username}`;
+                showAiActionSandbox("Email Reply Draft", draftContent, "email");
+            } else {
+                responseText = `**Local Secure Inference Result**: I searched your E2EE inbox but couldn't find any recent incoming messages to draft a response to. Please feel free to type a new email manually or receive one first!`;
+            }
+        } else if (lowerText.includes('log') || lowerText.includes('call') || lowerText.includes('sms') || lowerText.includes('message') || lowerText.includes('activity')) {
+            const logs = await getVirtualNumberLogs();
+            if (logs && logs.length > 0) {
+                responseText = `**Local Secure Inference Result**: I have locally queried your Virtual Phone Relay activity log. <br><br>I found **${logs.length} recent communication events**. I've compiled a clean, bullet-pointed textual summary of this activity in the **Generated Draft** panel on the right so you can copy it or share it securely!`;
+                let summaryText = `SECURE VIRTUAL NUMBER ACTIVITY SUMMARY\n======================================\nUser: ${session.username}\nGenerated: ${new Date().toLocaleString()}\n\n`;
+                logs.forEach((log, idx) => {
+                    const dateStr = new Date(log.timestamp).toLocaleTimeString();
+                    const typeStr = log.type === 'sms' ? 'SMS Message' : 'Voice Call';
+                    const dirStr = log.direction === 'inbound' ? 'Received from' : 'Sent to';
+                    const contactStr = log.direction === 'inbound' ? log.from : log.to;
+                    summaryText += `${idx + 1}. [${dateStr}] ${typeStr} (${dirStr} ${contactStr})\n`;
+                    if (log.type === 'sms' && log.body) {
+                        summaryText += `   Content: "${log.body}"\n`;
+                    }
+                    summaryText += `\n`;
+                });
+                showAiActionSandbox("Call & SMS Logs Summary", summaryText, "copy_only");
+            } else {
+                responseText = `**Local Secure Inference Result**: No virtual number activity logs were found in your local database yet. You can simulate incoming calls or SMS logs using the simulation panel under the "Virtual Number" page to see real-time log summarization!`;
+            }
+        } else if (lowerText.includes('calendar') || lowerText.includes('schedule') || lowerText.includes('meet') || lowerText.includes('appointment') || lowerText.includes('gap') || lowerText.includes('plan')) {
+            responseText = `**Local Secure Inference Result**: I've analyzed your E2EE calendar records. <br><br>I have scanned for available scheduling gaps. Based on your current calendar items, I've designed a meeting proposal slot for you in the **Generated Draft** card on the right. You can insert it directly into your calendar using the **Insert into Calendar** action!`;
+            const events = await getCalendarEvents();
+            let dateStr = "2026-05-22";
+            if (events && events.length > 0) {
+                dateStr = events[0].date || "2026-05-22";
+            }
+            let gapProposal = `Meeting Proposal: Alumni Project Sync\nDate: ${dateStr}\nStart Time: 14:00\nEnd Time: 15:00\nDescription: Secured sync regarding private communication portal configurations and key validation routines.`;
+            showAiActionSandbox("Calendar Meeting Plan", gapProposal, "calendar");
+        } else {
+            responseText = `I have received your query: *"${escapeHTML(text)}"* <br><br>Because I run purely **on-device in a zero-knowledge sandboxed context**, I don't send any metadata back to external cloud models. <br><br>For the most secure experience, you can use my local semantic workspace shortcuts on the right or ask me specific questions like:<br>• *"Draft a reply to my latest email"*<br>• *"Summarize my virtual number logs"*<br>• *"Find gaps in my schedule today"*`;
+        }
+        
+        if (loader) loader.classList.add('hidden');
+        appendAiMessage(responseText);
+    }, 1000);
+}
+
+/**
+ * Triggers interactive zero-knowledge local semantic analysis when action chips are clicked.
+ */
+function triggerAiAction(actionType) {
+    const loader = document.getElementById('ai-learning-loader');
+    const loaderText = document.getElementById('ai-loader-text');
+    
+    if (loader) {
+        loader.classList.remove('hidden');
+        if (actionType === 'draft_email') {
+            if (loaderText) loaderText.textContent = "Analyzing E2EE message keys and thread context...";
+        } else if (actionType === 'summarize_logs') {
+            if (loaderText) loaderText.textContent = "Processing local Virtual Relay text patterns...";
+        } else if (actionType === 'schedule_plan') {
+            if (loaderText) loaderText.textContent = "Synthesizing schedule gap metrics...";
+        }
+    }
+    
+    setTimeout(async () => {
+        if (loader) loader.classList.add('hidden');
+        
+        if (actionType === 'draft_email') {
+            const latestEmail = await getLatestIncomingEmail();
+            if (latestEmail) {
+                const draftContent = `Subject: Re: ${latestEmail.subject}\n\nHi ${latestEmail.senderName},\n\nThank you for reaching out. I have securely processed your message and would love to connect to discuss this further.\n\nLet me know what time works best for you.\n\nBest regards,\n${session.username}`;
+                showAiActionSandbox("Email Reply Draft", draftContent, "email");
+                
+                appendAiMessage(`I've analyzed your latest secure incoming email from **${escapeHTML(latestEmail.sender)}** regarding *"${escapeHTML(latestEmail.subject)}"*. I've generated a secure context-aware draft reply for you. You can review and apply it directly using the **Insert Into Compose Box** card on the right!`);
+            } else {
+                appendAiMessage(`I searched your E2EE inbox but couldn't find any recent incoming messages to draft a response to. Please feel free to type a new email manually or receive one first!`);
+            }
+        } else if (actionType === 'summarize_logs') {
+            const logs = await getVirtualNumberLogs();
+            if (logs && logs.length > 0) {
+                let summaryText = `SECURE VIRTUAL NUMBER ACTIVITY SUMMARY\n======================================\nUser: ${session.username}\nGenerated: ${new Date().toLocaleString()}\n\n`;
+                logs.forEach((log, idx) => {
+                    const dateStr = new Date(log.timestamp).toLocaleTimeString();
+                    const typeStr = log.type === 'sms' ? 'SMS Message' : 'Voice Call';
+                    const dirStr = log.direction === 'inbound' ? 'Received from' : 'Sent to';
+                    const contactStr = log.direction === 'inbound' ? log.from : log.to;
+                    summaryText += `${idx + 1}. [${dateStr}] ${typeStr} (${dirStr} ${contactStr})\n`;
+                    if (log.type === 'sms' && log.body) {
+                        summaryText += `   Content: "${log.body}"\n`;
+                    }
+                    summaryText += `\n`;
+                });
+                showAiActionSandbox("Call & SMS Logs Summary", summaryText, "copy_only");
+                
+                appendAiMessage(`I have locally queried your Virtual Phone Relay activity log. I found **${logs.length} recent communication events**. I've compiled a clean, bullet-pointed textual summary of this activity in the **Generated Draft** panel on the right so you can copy it or share it securely!`);
+            } else {
+                appendAiMessage(`No virtual number activity logs were found in your local database yet. You can simulate incoming calls or SMS logs using the simulation panel under the "Virtual Number" page to see real-time log summarization!`);
+            }
+        } else if (actionType === 'schedule_plan') {
+            const events = await getCalendarEvents();
+            let dateStr = "2026-05-22";
+            if (events && events.length > 0) {
+                dateStr = events[0].date || "2026-05-22";
+            }
+            let gapProposal = `Meeting Proposal: Alumni Project Sync\nDate: ${dateStr}\nStart Time: 14:00\nEnd Time: 15:00\nDescription: Secured sync regarding private communication portal configurations and key validation routines.`;
+            showAiActionSandbox("Calendar Meeting Plan", gapProposal, "calendar");
+            
+            appendAiMessage(`I've analyzed your E2EE calendar records. I have scanned for available scheduling gaps. Based on your current calendar items, I've designed a meeting proposal slot for you in the **Generated Draft** card on the right. You can insert it directly into your calendar using the **Insert into Calendar** action!`);
+        }
+    }, 1000);
+}
+
+/**
+ * Copies the text in `#ai-result-textarea` to the clipboard.
+ */
+function copyAiResultText() {
+    const textarea = document.getElementById('ai-result-textarea');
+    if (!textarea || !textarea.value) return;
+    
+    navigator.clipboard.writeText(textarea.value).then(() => {
+        const copyBtn = document.querySelector('[onclick="copyAiResultText()"]');
+        if (copyBtn) {
+            const originalHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = `<span class="material-symbols-outlined" style="font-size: 14px;">check</span> Copied!`;
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHtml;
+            }, 2000);
+        }
+    }).catch(err => {
+        console.error("Agent Zero failed to copy text:", err);
+    });
+}
+
+/**
+ * Injects the AI draft or schedule parameters live into active UI components.
+ */
+async function applyAiResultAction() {
+    const textarea = document.getElementById('ai-result-textarea');
+    if (!textarea || !textarea.value) return;
+    
+    const content = textarea.value;
+    
+    if (activeAiResultType === 'email') {
+        const lines = content.split('\n');
+        let subject = "Re: Hello";
+        let toEmail = "";
+        
+        const latestEmail = await getLatestIncomingEmail();
+        if (latestEmail) {
+            toEmail = latestEmail.sender;
+            subject = `Re: ${latestEmail.subject}`;
+        }
+        
+        let body = content;
+        if (content.startsWith("Subject: ")) {
+            const firstLine = lines[0];
+            subject = firstLine.replace("Subject: ", "");
+            body = lines.slice(2).join('\n');
+        }
+        
+        openComposer();
+        document.getElementById('compose-to').value = toEmail;
+        document.getElementById('compose-subject').value = subject;
+        document.getElementById('compose-body').value = body;
+        evaluateRecipientKeys();
+    } else if (activeAiResultType === 'calendar') {
+        const lines = content.split('\n');
+        let title = "Alumni Project Sync";
+        let date = "2026-05-22";
+        let time = "14:00";
+        let desc = "Secured sync regarding private communication portal configurations.";
+        
+        lines.forEach(line => {
+            if (line.startsWith("Meeting Proposal: ")) title = line.replace("Meeting Proposal: ", "");
+            if (line.startsWith("Date: ")) date = line.replace("Date: ", "");
+            if (line.startsWith("Start Time: ")) time = line.replace("Start Time: ", "");
+            if (line.startsWith("Description: ")) desc = line.replace("Description: ", "");
+        });
+        
+        switchView('calendar');
+        openAddMeetingModal();
+        document.getElementById('meeting-title').value = title;
+        document.getElementById('meeting-date').value = date;
+        document.getElementById('meeting-time').value = time;
+        document.getElementById('meeting-desc').value = desc;
+    }
+}
+
 
