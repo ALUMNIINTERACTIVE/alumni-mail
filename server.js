@@ -228,7 +228,7 @@ app.post('/api/auth/register', (req, res) => {
     }
 
     const prefix = normUser.split('@')[0].toLowerCase();
-    const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
+    const isBypass = ['satoshi', 'dev', 'nycole', 'khalil'].includes(prefix);
     const resolvedTier = isBypass ? 'Elite' : 'Free';
 
     db.users[normUser] = {
@@ -290,7 +290,7 @@ app.post('/api/auth/login', (req, res) => {
     );
 
     const prefix = normUser.split('@')[0].toLowerCase();
-    const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
+    const isBypass = ['satoshi', 'dev', 'nycole', 'khalil'].includes(prefix);
     const resolvedTier = isBypass ? 'Elite' : (user.tier || 'Free');
 
     // Auto-assign virtual number to bypass profiles if missing
@@ -475,7 +475,7 @@ app.post('/api/auth/webauthn/login-verify', (req, res) => {
         auditLog("SELECT", `Verified WebAuthn signature for user ${normUser} using credential ${credentialId.substring(0, 15)}...`);
 
         const prefix = normUser.split('@')[0].toLowerCase();
-        const isBypass = ['satoshi', 'dev', 'nycole'].includes(prefix);
+        const isBypass = ['satoshi', 'dev', 'nycole', 'khalil'].includes(prefix);
         const resolvedTier = isBypass ? 'Elite' : (foundUser.tier || 'Free');
 
         res.json({
@@ -924,13 +924,43 @@ function resolveRecipientAddress(recipient) {
     if (!recipient) return "";
     const clean = recipient.trim();
     
-    // 1. Treasury/Escrow tag resolution
+    // 1. Check if recipient is a registered email or alias in our db
+    const db = loadDB();
+    const cleanLower = clean.toLowerCase();
+    const userKeys = Object.keys(db.users);
+    
+    // Match directly by username or suffix split
+    let matchedUser = userKeys.find(u => u === cleanLower || u.split('@')[0] === cleanLower);
+    if (!matchedUser && db.aliases) {
+        const matchedAlias = db.aliases.find(a => a.email.toLowerCase() === cleanLower);
+        if (matchedAlias) {
+            matchedUser = matchedAlias.owner;
+        }
+    }
+
+    if (matchedUser && db.users[matchedUser]) {
+        const userObj = db.users[matchedUser];
+        if (userObj.walletTag) {
+            return resolveRecipientAddress(userObj.walletTag);
+        }
+    }
+
+    // 2. Pre-map standard tags to simulated EC public key PEMs
     const upper = clean.toUpperCase();
-    if (upper === "@ALUMNI.SATOSHI" || upper === "SATOSHI" || clean.toLowerCase() === "alumnimail.escrow") {
+    if (upper === "@ALUMNI.SATOSHI" || upper === "SATOSHI" || cleanLower === "alumnimail.escrow") {
         return "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAENwPfFbba+A9l6uFutbQucAOUgPQNujNn\nTl+oXgr5F0U+SPynvHJbC07kXms5iYwEAtqT1D3ErWnPX+a6XE7NtQ==\n-----END PUBLIC KEY-----\n";
     }
+    if (upper === "@ALUMNI.DEV" || upper === "DEV" || cleanLower === "dev@alumnimail.app") {
+        return "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEf4D3q9W2Z+Y5KusFvtQqcAOUgPQtunNn\nTl+oXgr5F0U+SPynvHJbC07kXms5iYwEAtqT1D3ErWnPX+a6XE7Ndev==\n-----END PUBLIC KEY-----\n";
+    }
+    if (upper === "@ALUMNI.NYCOLE" || upper === "NYCOLE" || cleanLower === "nycole@alumnimail.app") {
+        return "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEa6B2s9X2Y+Y5KusFvtQqcAOUgPQnujNn\nTl+oXgr5F0U+SPynvHJbC07kXms5iYwEAtqT1D3ErWnPX+a6XE7Nnyc==\n-----END PUBLIC KEY-----\n";
+    }
+    if (upper === "@ALUMNI.KHALIL" || upper === "KHALIL" || cleanLower === "khalil@alumnimail.app") {
+        return "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEk3C1s9X2Y+Y5KusFvtQqcAOUgPQkujNn\nTl+oXgr5F0U+SPynvHJbC07kXms5iYwEAtqT1D3ErWnPX+a6XE7Nkhal==\n-----END PUBLIC KEY-----\n";
+    }
     
-    // 2. If it's a standard user tag (e.g. @ALUMNI.SOMETHING)
+    // 3. If it's a standard user tag (e.g. @ALUMNI.SOMETHING)
     if (clean.startsWith("@ALUMNI.")) {
         const tagValue = clean.substring(8);
         if (/^[A-Za-z0-9+/=\s\n\r]+$/.test(tagValue) && tagValue.length > 20) {
@@ -939,9 +969,28 @@ function resolveRecipientAddress(recipient) {
         }
     }
     
-    // 3. Otherwise treat as a raw address/key and derive standard PEM public key
+    // 4. Otherwise treat as a raw address/key and derive standard PEM public key
     return derivePublicKeyPEM(clean);
 }
+
+app.post('/api/v1/wallet/link', (req, res) => {
+    const { username, walletTag } = req.body;
+    if (!username) {
+        return res.status(400).json({ error: "Missing username parameter." });
+    }
+    const db = loadDB();
+    const normUser = username.toLowerCase().trim();
+    if (!db.users[normUser]) {
+        return res.status(404).json({ error: "User profile not found." });
+    }
+    
+    db.users[normUser].walletTag = walletTag ? walletTag.trim() : null;
+    saveDB(db);
+    
+    auditLog("UPDATE", `UPDATE users SET wallet_tag = ${walletTag ? `'${walletTag}'` : 'NULL'} WHERE username = '${normUser}';`);
+    
+    res.json({ success: true, walletTag: db.users[normUser].walletTag });
+});
 
 app.post('/api/v1/wallet/balance', async (req, res) => {
     const { tag, email, keyOrAddress } = req.body;
@@ -1209,11 +1258,11 @@ app.get('/api/v1/calendar/:username', (req, res) => {
     const db = loadDB();
     const normUser = req.params.username.toLowerCase().trim();
 
-    const userMeetings = db.meetings.filter(m => m.username === normUser);
+    const userMeetings = db.meetings.filter(m => m.username === normUser || (m.invitee && m.invitee.toLowerCase().trim() === normUser));
 
     auditLog(
         "SELECT",
-        `SELECT id, encrypted_payload, date, time FROM calendar_events WHERE username = '${normUser}';`,
+        `SELECT id, encrypted_payload, date, time FROM calendar_events WHERE username = '${normUser}' OR invitee = '${normUser}';`,
         { count: userMeetings.length }
     );
 
@@ -1238,14 +1287,21 @@ app.post('/api/v1/calendar/add', (req, res) => {
         time: meeting.time,
         ivTitle: meeting.ivTitle,
         ivDesc: meeting.ivDesc,
-        wrappingKey: meeting.wrappingKey
+        wrappingKey: meeting.wrappingKey,
+        // Invitee E2EE Fields:
+        invitee: meeting.invitee ? meeting.invitee.toLowerCase().trim() : null,
+        inviteeEncTitle: meeting.inviteeEncTitle || null,
+        inviteeEncDesc: meeting.inviteeEncDesc || null,
+        inviteeIvTitle: meeting.inviteeIvTitle || null,
+        inviteeIvDesc: meeting.inviteeIvDesc || null,
+        inviteeWrappingKey: meeting.inviteeWrappingKey || null
     });
 
     saveDB(db);
 
     auditLog(
         "INSERT",
-        `INSERT INTO calendar_events (id, username, encrypted_title, encrypted_desc, event_date, event_time, wrapping_key) VALUES ('${meeting.id}', '${normUser}', '${meeting.encryptedTitle.substring(0, 15)}...', '${meeting.encryptedDesc.substring(0, 15)}...', '${meeting.date}', '${meeting.time}', '${meeting.wrappingKey.substring(0, 10)}...');`,
+        `INSERT INTO calendar_events (id, username, invitee, encrypted_title, event_date, event_time) VALUES ('${meeting.id}', '${normUser}', ${meeting.invitee ? `'${meeting.invitee}'` : 'NULL'}, '${meeting.encryptedTitle.substring(0, 15)}...', '${meeting.date}', '${meeting.time}');`,
         { meetingId: meeting.id }
     );
 
