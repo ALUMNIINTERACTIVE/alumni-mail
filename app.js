@@ -2819,8 +2819,12 @@ function initSignalingSocket() {
     
     if (!session.username) return;
     
+    let host = window.location.host;
+    if (!host || host === "null" || window.location.protocol === 'file:') {
+        host = "localhost:8000";
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${host}`;
     
     signalingSocket = new WebSocket(wsUrl);
     
@@ -2870,6 +2874,138 @@ function initSignalingSocket() {
     };
 }
 
+async function acquireMediaStream(constraints) {
+    try {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        }
+    } catch (e) {
+        console.warn("[WEBRTC] Physical media devices unavailable, falling back to mock E2EE media stream...", e);
+    }
+    
+    console.log("[WEBRTC] Creating mock audio/video stream for sandbox/headless testing...");
+    const tracks = [];
+    
+    if (constraints.video) {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx2d = canvas.getContext('2d');
+            
+            let angle = 0;
+            const intervalId = setInterval(() => {
+                ctx2d.fillStyle = '#0a0f1d';
+                ctx2d.fillRect(0, 0, 640, 480);
+                
+                ctx2d.strokeStyle = 'rgba(16, 185, 129, 0.04)';
+                ctx2d.lineWidth = 1;
+                for (let i = 0; i < 640; i += 40) {
+                    ctx2d.beginPath();
+                    ctx2d.moveTo(i, 0);
+                    ctx2d.lineTo(i, 480);
+                    ctx2d.stroke();
+                }
+                for (let j = 0; j < 480; j += 40) {
+                    ctx2d.beginPath();
+                    ctx2d.moveTo(0, j);
+                    ctx2d.lineTo(640, j);
+                    ctx2d.stroke();
+                }
+                
+                ctx2d.fillStyle = 'rgba(16, 185, 129, 0.03)';
+                const scanlineY = (Date.now() / 10) % 480;
+                ctx2d.fillRect(0, scanlineY, 640, 4);
+                
+                ctx2d.shadowBlur = 10;
+                ctx2d.shadowColor = '#10b981';
+                ctx2d.fillStyle = '#10b981';
+                ctx2d.font = 'bold 24px monospace';
+                ctx2d.fillText('SECURE E2EE CALL TUNNEL', 160, 160);
+                
+                ctx2d.shadowBlur = 0;
+                ctx2d.fillStyle = '#a5b4fc';
+                ctx2d.font = '16px monospace';
+                ctx2d.fillText('ALUMNI INTERACTIVE L1 SECURED', 185, 200);
+                
+                ctx2d.fillStyle = '#94a3b8';
+                ctx2d.font = '14px monospace';
+                ctx2d.fillText('MOCK STREAM FOR DEMONSTRATION', 195, 230);
+                
+                ctx2d.save();
+                ctx2d.translate(320, 320);
+                ctx2d.rotate(angle);
+                
+                ctx2d.strokeStyle = '#10b981';
+                ctx2d.lineWidth = 3;
+                ctx2d.beginPath();
+                ctx2d.arc(0, 0, 50, 0, Math.PI * 2);
+                ctx2d.stroke();
+                
+                ctx2d.fillStyle = '#a5b4fc';
+                for (let k = 0; k < 4; k++) {
+                    const x = Math.cos(k * Math.PI / 2) * 50;
+                    const y = Math.sin(k * Math.PI / 2) * 50;
+                    ctx2d.beginPath();
+                    ctx2d.arc(x, y, 6, 0, Math.PI * 2);
+                    ctx2d.fill();
+                }
+                
+                ctx2d.restore();
+                angle += 0.03;
+            }, 30);
+            
+            const stream = canvas.captureStream(30);
+            const videoTrack = stream.getVideoTracks()[0];
+            
+            const origStop = videoTrack.stop;
+            videoTrack.stop = function() {
+                clearInterval(intervalId);
+                if (typeof origStop === 'function') origStop.call(this);
+            };
+            
+            tracks.push(videoTrack);
+        } catch (vidErr) {
+            console.error("Failed to generate mock video track:", vidErr);
+        }
+    }
+    
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            const osc = ctx.createOscillator();
+            const dst = ctx.createMediaStreamDestination();
+            
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = 0.001;
+            osc.connect(gainNode);
+            gainNode.connect(dst);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, ctx.currentTime);
+            osc.start();
+            
+            const audioTrack = dst.stream.getAudioTracks()[0];
+            const origAudioStop = audioTrack.stop;
+            audioTrack.stop = function() {
+                try { osc.stop(); } catch(e) {}
+                try { ctx.close(); } catch(e) {}
+                if (typeof origAudioStop === 'function') origAudioStop.call(this);
+            };
+            
+            tracks.push(audioTrack);
+        }
+    } catch (audErr) {
+        console.error("Failed to generate mock audio track:", audErr);
+    }
+    
+    if (tracks.length === 0) {
+        throw new Error("Unable to acquire any physical or fallback mock media streams.");
+    }
+    return new MediaStream(tracks);
+}
+
 async function initiateWebRTCCall(callType, customPeer) {
     if (!['Ultimate', 'Enterprise', 'Elite'].includes(session.userTier)) {
         alert("[SECURE] WebRTC In-App Calling is exclusive to the premium ULTIMATE E2EE tier. Please upgrade to initiate voice, video, or screen sharing!");
@@ -2917,12 +3053,13 @@ async function initiateWebRTCCall(callType, customPeer) {
             video: callType === 'video'
         };
         
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStream = await acquireMediaStream(constraints);
         
         const localVideo = document.getElementById('local-video');
         if (callType === 'video' && localVideo) {
             localVideo.srcObject = localStream;
             localVideo.style.display = "block";
+            localVideo.play().catch(err => console.warn("[WEBRTC] localVideo.play() failed:", err));
         }
         
         peerConnection = new RTCPeerConnection({
@@ -2944,7 +3081,11 @@ async function initiateWebRTCCall(callType, customPeer) {
         peerConnection.ontrack = (event) => {
             const remoteVideo = document.getElementById('remote-video');
             if (remoteVideo) {
-                remoteVideo.srcObject = event.streams[0];
+                const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+                remoteVideo.srcObject = stream;
+                remoteVideo.play().catch(err => {
+                    console.warn("[WEBRTC] remoteVideo.play() failed:", err);
+                });
                 logCallConsole("[OK] Secure decrypted stream received from peer.", "success");
             }
         };
@@ -3066,7 +3207,7 @@ async function acceptCall() {
         return;
     }
     
-    currentCallPeer = pendingCaller;
+    currentCallPeer = pendingCaller.toLowerCase().trim();
     
     updateHubSessionUI();
     
@@ -3090,12 +3231,13 @@ async function acceptCall() {
             video: currentCallType === 'video'
         };
         
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStream = await acquireMediaStream(constraints);
         
         const localVideo = document.getElementById('local-video');
         if (currentCallType === 'video' && localVideo) {
             localVideo.srcObject = localStream;
             localVideo.style.display = "block";
+            localVideo.play().catch(err => console.warn("[WEBRTC] localVideo.play() failed:", err));
         }
         
         peerConnection = new RTCPeerConnection({
@@ -3119,7 +3261,11 @@ async function acceptCall() {
         peerConnection.ontrack = (event) => {
             const remoteVideo = document.getElementById('remote-video');
             if (remoteVideo) {
-                remoteVideo.srcObject = event.streams[0];
+                const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+                remoteVideo.srcObject = stream;
+                remoteVideo.play().catch(err => {
+                    console.warn("[WEBRTC] remoteVideo.play() failed:", err);
+                });
                 logCallConsole("[OK] Secure decrypted stream received from peer.", "success");
             }
         };
@@ -3210,10 +3356,9 @@ async function processQueuedIceCandidates() {
 }
 
 async function handleIceCandidateSignal(data) {
-    if (!peerConnection) return;
     try {
-        if (!peerConnection.remoteDescription) {
-            console.log("[WS_SIGNAL] Queueing ICE candidate because remoteDescription is null");
+        if (!peerConnection || !peerConnection.remoteDescription) {
+            console.log("[WS_SIGNAL] Queueing ICE candidate because peerConnection or remoteDescription is null");
             iceCandidatesQueue.push(data.candidate);
         } else {
             await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
@@ -4914,32 +5059,120 @@ async function applyAiResultAction() {
 // -------------------------------------------------------------
 // BLOCKCHAIN APP REGISTRY & INTEGRITY VERIFICATION
 // -------------------------------------------------------------
-function renderRegistryView() {
+async function renderRegistryView() {
     const tbody = document.getElementById('registry-ledger-tbody');
     if (!tbody) return;
     
-    tbody.innerHTML = `
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-            <td style="padding: 8px 0; font-family: monospace; color: var(--accent-light);">0x8f2d...ea7c2</td>
-            <td style="padding: 8px 0;">Contract Deployment</td>
-            <td style="padding: 8px 0;"><span style="color: #10b981; font-weight: 800;">SUCCESS</span></td>
-        </tr>
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-            <td style="padding: 8px 0; font-family: monospace; color: var(--accent-light);">0x3a4f...9c10b</td>
-            <td style="padding: 8px 0;">Security Seal Minting</td>
-            <td style="padding: 8px 0;"><span style="color: #10b981; font-weight: 800;">SUCCESS</span></td>
-        </tr>
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-            <td style="padding: 8px 0; font-family: monospace; color: var(--accent-light);">0x7c9d...5e8fa</td>
-            <td style="padding: 8px 0;">Code Hash Registration</td>
-            <td style="padding: 8px 0;"><span style="color: #10b981; font-weight: 800;">SUCCESS</span></td>
-        </tr>
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-            <td style="padding: 8px 0; font-family: monospace; color: var(--accent-light);">0x2b8e...1d6cb</td>
-            <td style="padding: 8px 0;">L1 Routing Map Init</td>
-            <td style="padding: 8px 0;"><span style="color: #10b981; font-weight: 800;">SUCCESS</span></td>
-        </tr>
-    `;
+    try {
+        const statusRes = await fetch('/api/v1/blockchain/status');
+        if (!statusRes.ok) throw new Error("Server status API unreachable");
+        const statusData = await statusRes.json();
+        
+        // Update stats card fields
+        const contractEl = document.getElementById('registry-contract-address');
+        if (contractEl) {
+            contractEl.innerText = statusData.contractAddress;
+        }
+        
+        const nodeUrlEl = document.getElementById('registry-node-url');
+        if (nodeUrlEl) {
+            nodeUrlEl.innerText = statusData.rpcUrl;
+        }
+        
+        const blockHeightEl = document.getElementById('registry-block-height');
+        if (blockHeightEl) {
+            blockHeightEl.innerText = `#${statusData.blockHeight} (${statusData.connected ? 'L1 Live' : 'Offline'})`;
+        }
+        
+        // Fetch blocks
+        const blocksRes = await fetch('/api/v1/blockchain/blocks');
+        if (!blocksRes.ok) throw new Error("Server blocks API unreachable");
+        const blocks = await blocksRes.json();
+        
+        // Find if we have Alumni Mail registered and fetch its release hash
+        let releaseHash = "Not Registered";
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            const block = blocks[i];
+            for (const tx of block.transactions) {
+                if (tx.type === "CONTRACT_DEPLOY" && tx.payload && tx.payload.initialState && tx.payload.initialState.apps && tx.payload.initialState.apps["Alumni Mail"]) {
+                    releaseHash = tx.payload.initialState.apps["Alumni Mail"].bundleHash;
+                }
+                if (tx.type === "CONTRACT_CALL" && tx.payload && tx.payload.method === "registerApp" && tx.payload.args && tx.payload.args.appName === "Alumni Mail") {
+                    releaseHash = tx.payload.args.bundleHash;
+                }
+                if (tx.type === "CONTRACT_CALL" && tx.payload && tx.payload.method === "updateAppHash" && tx.payload.args && tx.payload.args.appName === "Alumni Mail") {
+                    releaseHash = tx.payload.args.bundleHash;
+                }
+            }
+        }
+        
+        // Fallback: If not found in logs, query contract state directly
+        if (releaseHash === "Not Registered") {
+            try {
+                const contractStateRes = await fetch(`/api/v1/blockchain/state/${statusData.contractAddress}`);
+                if (contractStateRes.ok) {
+                    const contractState = await contractStateRes.json();
+                    if (contractState && contractState.apps && contractState.apps["Alumni Mail"]) {
+                        releaseHash = contractState.apps["Alumni Mail"].bundleHash;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to query direct contract state for app hash:", e);
+            }
+        }
+        
+        const releaseHashEl = document.getElementById('registry-release-hash');
+        if (releaseHashEl) {
+            releaseHashEl.innerText = releaseHash !== "Not Registered" ? releaseHash.substring(0, 16) + "..." + releaseHash.substring(56) : "Not Minted";
+            releaseHashEl.title = releaseHash;
+        }
+        
+        // Populate the ledger rows
+        let rowsHtml = '';
+        let txCount = 0;
+        
+        // Walk blocks backwards
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            const block = blocks[i];
+            if (!block.transactions || block.transactions.length === 0) {
+                continue;
+            }
+            
+            for (const tx of block.transactions) {
+                txCount++;
+                const displayTxHash = tx.signature ? '0x' + tx.signature.substring(10, 22) : '0x' + block.hash.substring(0, 12);
+                let typeText = tx.type;
+                if (tx.type === "CONTRACT_CALL" && tx.payload && tx.payload.method) {
+                    typeText = `CONTRACT_CALL: ${tx.payload.method}`;
+                }
+                
+                rowsHtml += `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                        <td style="padding: 8px 0; font-family: monospace; color: var(--accent-light); cursor: pointer;" title="Copy Signature Hash" onclick="navigator.clipboard.writeText('${tx.signature || block.hash}'); showNotification('Transaction ID copied!')">${displayTxHash}</td>
+                        <td style="padding: 8px 0;">${typeText}</td>
+                        <td style="padding: 8px 0;"><span style="color: #10b981; font-weight: 800;">SUCCESS</span></td>
+                    </tr>
+                `;
+            }
+        }
+        
+        if (txCount === 0) {
+            rowsHtml = `
+                <tr>
+                    <td colspan="3" style="padding: 20px 0; text-align: center; color: var(--text-muted);">No ledger transactions recorded on-chain yet.</td>
+                </tr>
+            `;
+        }
+        
+        tbody.innerHTML = rowsHtml;
+    } catch (err) {
+        console.error("Failed to render authentic L1 ledger registry:", err);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="3" style="padding: 20px 0; text-align: center; color: #ef4444;">Failed to connect to Alumni L1 Ledger: ${err.message}</td>
+            </tr>
+        `;
+    }
 }
 
 let isScanning = false;
@@ -4961,40 +5194,86 @@ async function runIntegrityScan() {
         runBtn.disabled = true;
         runBtn.innerText = "Scanning Bundle...";
     }
+    if (progressBar) {
+        progressBar.style.backgroundColor = ""; // Reset red background if any
+    }
     
-    const steps = [
-        { progress: 15, status: "Initializing secure RPC node connection...", log: "RPC: Connected to Alumni L1 Mainnet Node at ws://node.alumni.l1" },
-        { progress: 40, status: "Retrieving on-chain package release hash...", log: "CONTRACT: Loaded contract state for 0xALUMNI_MAIL_dAPP_v1_REGISTRY" },
-        { progress: 75, status: "Computing local web bundle client SHA-256...", log: "LOCAL: Computed local build hash (8f4b52c0022ea15db976...562c5b9)" },
-        { progress: 95, status: "Comparing local and on-chain checksums...", log: "VERIFY: 0x8f2d...ea7c2 matches local client checksum 100%" },
-        { progress: 100, status: "Bundle authenticity verified securely!", log: "SUCCESS: Shield active. Zero-Knowledge envelope protected." }
-    ];
-    
-    let currentStepIdx = 0;
-    
-    const interval = setInterval(() => {
-        if (currentStepIdx >= steps.length) {
-            clearInterval(interval);
-            isScanning = false;
-            if (successBadge) successBadge.classList.remove('hidden');
-            if (runBtn) {
-                runBtn.disabled = false;
-                runBtn.innerText = "Re-Verify Code Authenticity";
-            }
-            if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
-                window.AlumniMailDB.auditLog("L1 SHIELD", "Verified client web bundle SHA-256 checksum matches 0xALUMNI_MAIL_dAPP_v1_REGISTRY 100%");
-            }
-            return;
+    const updateProgress = (progress, status, log) => {
+        if (statusText) statusText.innerText = status;
+        if (percentText) percentText.innerText = `${progress}%`;
+        if (progressBar) progressBar.style.width = `${progress}%`;
+        if (stepLog) stepLog.innerText = log;
+    };
+
+    try {
+        // Step 1: Initialize connection
+        updateProgress(15, "Connecting to Alumni L1 RPC...", "RPC: Querying status from backend at /api/v1/blockchain/status...");
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        const statusRes = await fetch('/api/v1/blockchain/status');
+        if (!statusRes.ok) throw new Error("Blockchain status endpoint offline");
+        const statusData = await statusRes.json();
+        if (!statusData.connected) throw new Error("Local L1 validator node is unreachable");
+        
+        updateProgress(35, "Retrieving on-chain release release hash...", `CONTRACT: Connected to contract at ${statusData.contractAddress.substring(0, 16)}...`);
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Fetch contract state
+        const stateRes = await fetch(`/api/v1/blockchain/state/${statusData.contractAddress}`);
+        if (!stateRes.ok) throw new Error("Failed to retrieve contract state from RPC");
+        const state = await stateRes.json();
+        
+        const appInfo = state.apps && state.apps["Alumni Mail"];
+        if (!appInfo) throw new Error("Alumni Mail dApp is not registered in the smart contract registry");
+        const onChainHash = appInfo.bundleHash;
+        
+        updateProgress(65, "Computing local client build SHA-256...", `LOCAL: Fetching local app.js payload for live audit...`);
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        const localCodeRes = await fetch('/app.js');
+        if (!localCodeRes.ok) throw new Error("Failed to fetch local client bundle app.js");
+        const localCode = await localCodeRes.text();
+        
+        // Crypto SHA-256
+        const encoder = new TextEncoder();
+        const codeData = encoder.encode(localCode);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', codeData);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const computedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        updateProgress(85, "Cross-referencing checksums...", `LOCAL HASH: ${computedHash.substring(0, 20)}... \nON-CHAIN HASH: ${onChainHash.substring(0, 20)}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        if (computedHash !== onChainHash) {
+            throw new Error(`CRITICAL: Integrity verification failed! Local hash ${computedHash.substring(0, 10)}... does not match on-chain registered release hash ${onChainHash.substring(0, 10)}...`);
         }
         
-        const step = steps[currentStepIdx];
-        if (statusText) statusText.innerText = step.status;
-        if (percentText) percentText.innerText = `${step.progress}%`;
-        if (progressBar) progressBar.style.width = `${step.progress}%`;
-        if (stepLog) stepLog.innerText = step.log;
+        updateProgress(100, "Bundle authenticity verified securely!", `SUCCESS: 100% Match! SHA-256 is verified secure by on-chain smart contract.`);
         
-        currentStepIdx++;
-    }, 800);
+        if (successBadge) {
+            successBadge.classList.remove('hidden');
+            successBadge.innerHTML = `<span class="material-symbols-outlined" style="color: #10b981; font-size: 18px; font-variation-settings: 'FILL' 1;">verified</span>
+                                     <strong style="color: #10b981;">VERIFIED SECURE dAPP RELEASE (100% MATCH: ${computedHash.substring(0, 12)}...)</strong>`;
+        }
+        
+        if (window.AlumniMailDB && window.AlumniMailDB.auditLog) {
+            window.AlumniMailDB.auditLog("L1 SHIELD", `Verified client web bundle SHA-256 checksum matches Alumni L1 Registry 100%. Hash: ${computedHash}`);
+        }
+        
+    } catch (err) {
+        console.error("Integrity Scan Failed:", err);
+        updateProgress(0, "Integrity Scan Failed", `ERROR: ${err.message}`);
+        if (progressBar) {
+            progressBar.style.backgroundColor = "#ef4444";
+            progressBar.style.width = "100%";
+        }
+    } finally {
+        isScanning = false;
+        if (runBtn) {
+            runBtn.disabled = false;
+            runBtn.innerText = "Re-Verify Code Authenticity";
+        }
+    }
 }
 
 // Expose globally
