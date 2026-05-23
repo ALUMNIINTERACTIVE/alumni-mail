@@ -2558,7 +2558,7 @@ function loadUserTier() {
     let tier = localStorage.getItem(`user_tier_${session.username}`) || 'Free';
     if (session.username) {
         const prefix = session.username.split('@')[0].toLowerCase();
-        if (['satoshi', 'dev', 'nycole', 'khalil'].includes(prefix)) {
+        if (['satoshi', 'dev', 'nycole', 'khalil', 'hal'].includes(prefix)) {
             tier = 'Elite';
         }
     }
@@ -3080,24 +3080,46 @@ async function initiateWebRTCCall(callType, customPeer) {
         
         peerConnection.ontrack = (event) => {
             const remoteVideo = document.getElementById('remote-video');
-            if (remoteVideo) {
-                let stream = event.streams && event.streams[0];
-                if (!stream) {
-                    if (!remoteVideo.srcObject) {
-                        remoteVideo.srcObject = new MediaStream();
+            const remoteAudio = document.getElementById('remote-audio');
+            
+            if (event.track.kind === 'audio') {
+                if (remoteAudio) {
+                    let stream = event.streams && event.streams[0];
+                    if (!stream) {
+                        if (!remoteAudio.srcObject) {
+                            remoteAudio.srcObject = new MediaStream();
+                        }
+                        stream = remoteAudio.srcObject;
+                        stream.addTrack(event.track);
+                    } else {
+                        if (remoteAudio.srcObject !== stream) {
+                            remoteAudio.srcObject = stream;
+                        }
                     }
-                    stream = remoteVideo.srcObject;
-                    stream.addTrack(event.track);
-                } else {
-                    if (remoteVideo.srcObject !== stream) {
-                        remoteVideo.srcObject = stream;
-                    }
+                    remoteAudio.play().catch(err => {
+                        console.warn("[WEBRTC] remoteAudio.play() failed:", err);
+                    });
                 }
-                
-                remoteVideo.play().catch(err => {
-                    console.warn("[WEBRTC] remoteVideo.play() failed:", err);
-                });
-                logCallConsole("[OK] Secure decrypted stream received from peer.", "success");
+                logCallConsole("[OK] Secure decrypted remote audio track synced.", "success");
+            } else if (event.track.kind === 'video') {
+                if (remoteVideo) {
+                    let stream = event.streams && event.streams[0];
+                    if (!stream) {
+                        if (!remoteVideo.srcObject) {
+                            remoteVideo.srcObject = new MediaStream();
+                        }
+                        stream = remoteVideo.srcObject;
+                        stream.addTrack(event.track);
+                    } else {
+                        if (remoteVideo.srcObject !== stream) {
+                            remoteVideo.srcObject = stream;
+                        }
+                    }
+                    remoteVideo.play().catch(err => {
+                        console.warn("[WEBRTC] remoteVideo.play() failed:", err);
+                    });
+                }
+                logCallConsole("[OK] Secure decrypted remote video track synced.", "success");
             }
         };
         
@@ -3271,24 +3293,46 @@ async function acceptCall() {
         
         peerConnection.ontrack = (event) => {
             const remoteVideo = document.getElementById('remote-video');
-            if (remoteVideo) {
-                let stream = event.streams && event.streams[0];
-                if (!stream) {
-                    if (!remoteVideo.srcObject) {
-                        remoteVideo.srcObject = new MediaStream();
+            const remoteAudio = document.getElementById('remote-audio');
+            
+            if (event.track.kind === 'audio') {
+                if (remoteAudio) {
+                    let stream = event.streams && event.streams[0];
+                    if (!stream) {
+                        if (!remoteAudio.srcObject) {
+                            remoteAudio.srcObject = new MediaStream();
+                        }
+                        stream = remoteAudio.srcObject;
+                        stream.addTrack(event.track);
+                    } else {
+                        if (remoteAudio.srcObject !== stream) {
+                            remoteAudio.srcObject = stream;
+                        }
                     }
-                    stream = remoteVideo.srcObject;
-                    stream.addTrack(event.track);
-                } else {
-                    if (remoteVideo.srcObject !== stream) {
-                        remoteVideo.srcObject = stream;
-                    }
+                    remoteAudio.play().catch(err => {
+                        console.warn("[WEBRTC] remoteAudio.play() failed:", err);
+                    });
                 }
-                
-                remoteVideo.play().catch(err => {
-                    console.warn("[WEBRTC] remoteVideo.play() failed:", err);
-                });
-                logCallConsole("[OK] Secure decrypted stream received from peer.", "success");
+                logCallConsole("[OK] Secure decrypted remote audio track synced.", "success");
+            } else if (event.track.kind === 'video') {
+                if (remoteVideo) {
+                    let stream = event.streams && event.streams[0];
+                    if (!stream) {
+                        if (!remoteVideo.srcObject) {
+                            remoteVideo.srcObject = new MediaStream();
+                        }
+                        stream = remoteVideo.srcObject;
+                        stream.addTrack(event.track);
+                    } else {
+                        if (remoteVideo.srcObject !== stream) {
+                            remoteVideo.srcObject = stream;
+                        }
+                    }
+                    remoteVideo.play().catch(err => {
+                        console.warn("[WEBRTC] remoteVideo.play() failed:", err);
+                    });
+                }
+                logCallConsole("[OK] Secure decrypted remote video track synced.", "success");
             }
         };
         
