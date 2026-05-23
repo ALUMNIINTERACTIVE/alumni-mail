@@ -2085,6 +2085,16 @@ wss.on('connection', (socket) => {
                 case 'register': {
                     const normUser = getNormUsername(data.username);
                     registeredUser = normUser;
+                    
+                    // Close older stale socket for the same username to prevent split-brain signaling in multi-tabs
+                    const oldSocket = activeCalls.get(normUser);
+                    if (oldSocket && oldSocket !== socket) {
+                        try {
+                            oldSocket.close();
+                            auditLog("WS_SIGNAL", `Closed stale signaling socket for user: ${normUser}`);
+                        } catch(e) {}
+                    }
+                    
                     activeCalls.set(normUser, socket);
                     socket.send(JSON.stringify({ type: 'registered', status: 'success' }));
                     auditLog("WS_SIGNAL", `User registered for calling signaling: ${normUser}`);
@@ -2124,6 +2134,12 @@ wss.on('connection', (socket) => {
                             answer: data.answer
                         }));
                         auditLog("WS_SIGNAL", `Relaying call-accepted answer to ${targetNorm}`);
+                    } else {
+                        auditLog("WS_SIGNAL", `[WARNING] Failed to relay call-accepted answer: target ${targetNorm} is offline or closed.`);
+                        socket.send(JSON.stringify({
+                            type: 'call-failed',
+                            reason: `Target peer ${targetNorm} went offline or signaling connection was interrupted`
+                        }));
                     }
                     break;
                 }
@@ -2137,6 +2153,8 @@ wss.on('connection', (socket) => {
                             type: 'webrtc-ice',
                             candidate: data.candidate
                         }));
+                    } else {
+                        auditLog("WS_SIGNAL", `[WARNING] Failed to relay ICE candidate: target ${targetNorm} is offline or closed.`);
                     }
                     break;
                 }
@@ -2150,6 +2168,8 @@ wss.on('connection', (socket) => {
                             type: 'hangup-call'
                         }));
                         auditLog("WS_SIGNAL", `Relaying hangup from ${registeredUser} to ${targetNorm}`);
+                    } else {
+                        auditLog("WS_SIGNAL", `[WARNING] Failed to relay hangup: target ${targetNorm} is offline.`);
                     }
                     break;
                 }
