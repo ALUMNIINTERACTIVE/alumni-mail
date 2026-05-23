@@ -2978,7 +2978,7 @@ async function acquireMediaStream(constraints) {
             const dst = ctx.createMediaStreamDestination();
             
             const gainNode = ctx.createGain();
-            gainNode.gain.value = 0.001;
+            gainNode.gain.value = 0.15; // Set comfortable volume for E2EE voice simulation
             osc.connect(gainNode);
             gainNode.connect(dst);
             
@@ -3081,8 +3081,19 @@ async function initiateWebRTCCall(callType, customPeer) {
         peerConnection.ontrack = (event) => {
             const remoteVideo = document.getElementById('remote-video');
             if (remoteVideo) {
-                const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-                remoteVideo.srcObject = stream;
+                let stream = event.streams && event.streams[0];
+                if (!stream) {
+                    if (!remoteVideo.srcObject) {
+                        remoteVideo.srcObject = new MediaStream();
+                    }
+                    stream = remoteVideo.srcObject;
+                    stream.addTrack(event.track);
+                } else {
+                    if (remoteVideo.srcObject !== stream) {
+                        remoteVideo.srcObject = stream;
+                    }
+                }
+                
                 remoteVideo.play().catch(err => {
                     console.warn("[WEBRTC] remoteVideo.play() failed:", err);
                 });
@@ -3261,8 +3272,19 @@ async function acceptCall() {
         peerConnection.ontrack = (event) => {
             const remoteVideo = document.getElementById('remote-video');
             if (remoteVideo) {
-                const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-                remoteVideo.srcObject = stream;
+                let stream = event.streams && event.streams[0];
+                if (!stream) {
+                    if (!remoteVideo.srcObject) {
+                        remoteVideo.srcObject = new MediaStream();
+                    }
+                    stream = remoteVideo.srcObject;
+                    stream.addTrack(event.track);
+                } else {
+                    if (remoteVideo.srcObject !== stream) {
+                        remoteVideo.srcObject = stream;
+                    }
+                }
+                
                 remoteVideo.play().catch(err => {
                     console.warn("[WEBRTC] remoteVideo.play() failed:", err);
                 });
