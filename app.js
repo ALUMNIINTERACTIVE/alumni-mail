@@ -126,6 +126,43 @@ document.addEventListener('DOMContentLoaded', async () => {
             logo.style.transform = `translate(${x}px, ${y}px) rotateX(${y}deg) rotateY(${x}deg)`;
         }
     });
+
+    // 7. Recover active session if page refreshed
+    const activeSessionStr = sessionStorage.getItem('active_session');
+    if (activeSessionStr) {
+        try {
+            console.log("Restoring active session from sessionStorage...");
+            const activeSession = JSON.parse(activeSessionStr);
+            const kdk = await window.crypto.subtle.importKey(
+                "jwk",
+                activeSession.kdkJwk,
+                { name: "AES-GCM", length: 256 },
+                true,
+                ["encrypt", "decrypt"]
+            );
+            const privKey = await window.crypto.subtle.importKey(
+                "jwk",
+                activeSession.privateKeyJwk,
+                { name: "RSA-OAEP", hash: "SHA-256" },
+                true,
+                ["decrypt"]
+            );
+            
+            session.username = activeSession.username;
+            session.salt = activeSession.salt;
+            session.kdk = kdk;
+            session.privateKey = privKey;
+            session.publicJwk = activeSession.publicJwk;
+            session.encPrivateKey = activeSession.encPrivateKey;
+            session.userTier = activeSession.userTier;
+            
+            logActiveMemorySecrets();
+            enterMailbox();
+        } catch (restoreErr) {
+            console.error("Failed to restore active session:", restoreErr);
+            sessionStorage.removeItem('active_session');
+        }
+    }
 });
 
 function renderActiveViewData() {
@@ -952,7 +989,7 @@ Hal`;
     }
 }
 
-function enterMailbox() {
+async function enterMailbox() {
     document.getElementById('auth-screen').classList.remove('active');
     document.getElementById('dashboard-screen').classList.remove('hidden');
     document.getElementById('active-user-display').innerText = session.username;
@@ -965,6 +1002,26 @@ function enterMailbox() {
     
     // Connect WebRTC signaling socket
     initSignalingSocket();
+
+    // Persist active session in sessionStorage to support page refreshes
+    try {
+        if (session.username && session.kdk && session.privateKey) {
+            const exportedKdk = await window.crypto.subtle.exportKey("jwk", session.kdk);
+            const exportedPrivKey = await window.crypto.subtle.exportKey("jwk", session.privateKey);
+            
+            sessionStorage.setItem('active_session', JSON.stringify({
+                username: session.username,
+                salt: session.salt,
+                kdkJwk: exportedKdk,
+                privateKeyJwk: exportedPrivKey,
+                publicJwk: session.publicJwk,
+                encPrivateKey: session.encPrivateKey,
+                userTier: session.userTier
+            }));
+        }
+    } catch (e) {
+        console.error("Failed to save session to sessionStorage:", e);
+    }
 }
 
 function handleLogout() {
@@ -977,6 +1034,9 @@ function handleLogout() {
     session.publicJwk = null;
     session.encPrivateKey = null;
     session.activeEmailId = null;
+
+    // Clear active session from sessionStorage
+    sessionStorage.removeItem('active_session');
 
     // Reset UI Memory view
     document.getElementById('mem-kdk-val').innerText = "Key locked. Please log in.";
