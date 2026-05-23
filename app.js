@@ -3096,6 +3096,14 @@ async function initiateWebRTCCall(callType, customPeer) {
     const callOverlay = document.getElementById('call-overlay');
     if (callOverlay) callOverlay.classList.remove('hidden');
     
+    // Pre-unlock the remote-audio tag using direct user interaction context
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+        remoteAudio.muted = false;
+        remoteAudio.volume = 1.0;
+        remoteAudio.play().catch(e => console.log("[WEBRTC] Pre-unlocking remoteAudio on call initiation:", e));
+    }
+    
     const peerAddrDisplay = document.getElementById('call-peer-addr');
     if (peerAddrDisplay) peerAddrDisplay.innerText = peer;
     
@@ -3150,16 +3158,17 @@ async function initiateWebRTCCall(callType, customPeer) {
                             remoteAudio.srcObject = new MediaStream();
                         }
                         stream = remoteAudio.srcObject;
-                        stream.addTrack(event.track);
-                        
-                        // Force refresh srcObject to trigger browser to play audio
-                        remoteAudio.srcObject = null;
-                        remoteAudio.srcObject = stream;
-                    } else {
-                        if (remoteAudio.srcObject !== stream) {
-                            remoteAudio.srcObject = stream;
-                        }
                     }
+                    if (stream instanceof MediaStream && !stream.getTracks().includes(event.track)) {
+                        stream.addTrack(event.track);
+                    }
+                    
+                    // Unconditionally force-refresh srcObject to trigger browser to play audio
+                    remoteAudio.srcObject = null;
+                    remoteAudio.srcObject = stream;
+                    remoteAudio.muted = false;
+                    remoteAudio.volume = 1.0;
+                    
                     remoteAudio.play().catch(err => {
                         console.warn("[WEBRTC] remoteAudio.play() failed:", err);
                     });
@@ -3173,16 +3182,15 @@ async function initiateWebRTCCall(callType, customPeer) {
                             remoteVideo.srcObject = new MediaStream();
                         }
                         stream = remoteVideo.srcObject;
-                        stream.addTrack(event.track);
-                        
-                        // Force refresh srcObject to trigger browser to play video
-                        remoteVideo.srcObject = null;
-                        remoteVideo.srcObject = stream;
-                    } else {
-                        if (remoteVideo.srcObject !== stream) {
-                            remoteVideo.srcObject = stream;
-                        }
                     }
+                    if (stream instanceof MediaStream && !stream.getTracks().includes(event.track)) {
+                        stream.addTrack(event.track);
+                    }
+                    
+                    // Unconditionally force-refresh srcObject to trigger browser to play video
+                    remoteVideo.srcObject = null;
+                    remoteVideo.srcObject = stream;
+                    
                     remoteVideo.play().catch(err => {
                         console.warn("[WEBRTC] remoteVideo.play() failed:", err);
                     });
@@ -3315,6 +3323,14 @@ async function acceptCall() {
     const callOverlay = document.getElementById('call-overlay');
     if (callOverlay) callOverlay.classList.remove('hidden');
     
+    // Pre-unlock the remote-audio tag using direct user interaction context
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) {
+        remoteAudio.muted = false;
+        remoteAudio.volume = 1.0;
+        remoteAudio.play().catch(e => console.log("[WEBRTC] Pre-unlocking remoteAudio on call accept:", e));
+    }
+    
     const peerAddrDisplay = document.getElementById('call-peer-addr');
     if (peerAddrDisplay) peerAddrDisplay.innerText = currentCallPeer;
     
@@ -3371,16 +3387,17 @@ async function acceptCall() {
                             remoteAudio.srcObject = new MediaStream();
                         }
                         stream = remoteAudio.srcObject;
-                        stream.addTrack(event.track);
-                        
-                        // Force refresh srcObject to trigger browser to play audio
-                        remoteAudio.srcObject = null;
-                        remoteAudio.srcObject = stream;
-                    } else {
-                        if (remoteAudio.srcObject !== stream) {
-                            remoteAudio.srcObject = stream;
-                        }
                     }
+                    if (stream instanceof MediaStream && !stream.getTracks().includes(event.track)) {
+                        stream.addTrack(event.track);
+                    }
+                    
+                    // Unconditionally force-refresh srcObject to trigger browser to play audio
+                    remoteAudio.srcObject = null;
+                    remoteAudio.srcObject = stream;
+                    remoteAudio.muted = false;
+                    remoteAudio.volume = 1.0;
+                    
                     remoteAudio.play().catch(err => {
                         console.warn("[WEBRTC] remoteAudio.play() failed:", err);
                     });
@@ -3394,16 +3411,15 @@ async function acceptCall() {
                             remoteVideo.srcObject = new MediaStream();
                         }
                         stream = remoteVideo.srcObject;
-                        stream.addTrack(event.track);
-                        
-                        // Force refresh srcObject to trigger browser to play video
-                        remoteVideo.srcObject = null;
-                        remoteVideo.srcObject = stream;
-                    } else {
-                        if (remoteVideo.srcObject !== stream) {
-                            remoteVideo.srcObject = stream;
-                        }
                     }
+                    if (stream instanceof MediaStream && !stream.getTracks().includes(event.track)) {
+                        stream.addTrack(event.track);
+                    }
+                    
+                    // Unconditionally force-refresh srcObject to trigger browser to play video
+                    remoteVideo.srcObject = null;
+                    remoteVideo.srcObject = stream;
+                    
                     remoteVideo.play().catch(err => {
                         console.warn("[WEBRTC] remoteVideo.play() failed:", err);
                     });
@@ -5422,13 +5438,20 @@ async function runIntegrityScan() {
 window.renderRegistryView = renderRegistryView;
 window.runIntegrityScan = runIntegrityScan;
 
-// Global catch-all click listener to ensure that if browser blocked WebRTC remote audio autoplay,
-// any subsequent user click on the document immediately triggers audio playback!
-document.addEventListener('click', () => {
+// Global catch-all event listeners to ensure that if browser blocked WebRTC remote audio autoplay,
+// any subsequent user interaction on the document immediately triggers and resumes audio playback!
+const resumeAudioPlayback = () => {
     const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio && remoteAudio.srcObject && remoteAudio.paused) {
-        remoteAudio.play().catch(err => console.warn("[WEBRTC] Failed to play remote audio on subsequent user click:", err));
+    if (remoteAudio && remoteAudio.srcObject) {
+        remoteAudio.muted = false;
+        remoteAudio.volume = 1.0;
+        if (remoteAudio.paused) {
+            remoteAudio.play().catch(err => console.warn("[WEBRTC] Failed to play remote audio on user interaction:", err));
+        }
     }
-});
+};
+document.addEventListener('click', resumeAudioPlayback);
+document.addEventListener('touchstart', resumeAudioPlayback);
+document.addEventListener('pointerdown', resumeAudioPlayback);
 
 
