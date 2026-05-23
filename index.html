@@ -215,7 +215,7 @@
                     <div class="user-details" style="flex: 1;">
                         <span id="active-user-display" class="username">satoshi@alumnimail.app</span>
                         <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
-                            <span id="user-tier-badge" class="badge secondary" style="cursor: pointer; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--accent-light); border: 1px solid var(--accent-light);" onclick="openUpgradeModal()">FREE TIER</span>
+                            <span id="user-tier-badge" class="badge secondary" style="cursor: pointer; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--accent-light); border: 1px solid var(--accent-light);" onclick="openUpgradeModal()">FREE</span>
                             <span class="status-indicator-wrapper">
                                 <span class="status-dot green"></span>
                                 <span class="status-text">Client Secured</span>
@@ -1120,23 +1120,23 @@
                                 <div style="display: flex; flex-direction: column; gap: 12px; font-size: 0.85rem; margin-top: 15px;">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <span class="text-muted">dApp Smart Contract:</span>
-                                        <span class="font-mono accent-green" style="background: rgba(16,185,129,0.08); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16,185,129,0.2); font-size: 0.8rem;">0xALUMNI_MAIL_dAPP_v1_REGISTRY</span>
+                                        <span id="registry-contract-address" class="font-mono accent-green" style="background: rgba(16,185,129,0.08); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16,185,129,0.2); font-size: 0.8rem; cursor: pointer;" title="Copy contract address" onclick="navigator.clipboard.writeText(this.innerText); showNotification('Contract address copied!')">0xALUMNI_MAIL_dAPP_v1_REGISTRY</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span class="text-muted">Registry Tx Hash:</span>
-                                        <span class="font-mono text-muted" style="cursor: pointer; font-size: 0.8rem;" title="Copy transaction hash" onclick="navigator.clipboard.writeText('0x8f2d019ab76e27189dcb9a456fe871e98dcf629a3e23bf89ac01fb82d63ea7c2'); showNotification('Transaction hash copied!')">0x8f2d...ea7c2</span>
+                                        <span class="text-muted">RPC Node URL:</span>
+                                        <span id="registry-node-url" class="font-mono text-muted" style="cursor: pointer; font-size: 0.8rem;" title="Copy RPC URL" onclick="navigator.clipboard.writeText(this.innerText); showNotification('RPC URL copied!')">http://localhost:3001</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <span class="text-muted">Block Height:</span>
-                                        <span class="font-bold">#402,189 (L1 Mainnet)</span>
+                                        <span id="registry-block-height" class="font-bold">#0 (Connecting...)</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span class="text-muted">Gas Spent to Mint:</span>
-                                        <span class="font-mono" style="color: var(--accent-light);">14,203.85 ALUMNI</span>
+                                        <span class="text-muted">Gas Relayer Status:</span>
+                                        <span class="font-mono" style="color: var(--accent-light); font-weight: 800;">ACTIVE (FEELESS)</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span class="text-muted">App Release Signature (SHA-256):</span>
-                                        <span class="font-mono text-muted" style="font-size: 0.75rem;">8f4b52c0022ea15db976...562c5b9</span>
+                                        <span class="text-muted">App Release Checksum (SHA-256):</span>
+                                        <span id="registry-release-hash" class="font-mono text-muted" style="font-size: 0.75rem; word-break: break-all; text-align: right; max-width: 50%;">Retrieving...</span>
                                     </div>
                                 </div>
                             </div>
@@ -1212,7 +1212,7 @@
 
                             <!-- Real-time L1 Transactions -->
                             <div class="settings-card glass-panel" style="padding: 20px; flex: 1; display: flex; flex-direction: column;">
-                                <h3 style="margin-top: 0; color: var(--accent-light); font-size: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 12px;">Simulated Registry Ledger Activity</h3>
+                                <h3 style="margin-top: 0; color: var(--accent-light); font-size: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 12px;">Alumni L1 Blockchain Ledger Activity</h3>
                                 <div style="flex: 1; overflow-y: auto; max-height: 190px;" class="custom-scrollbar">
                                     <table style="width: 100%; border-collapse: collapse; font-size: 0.72rem; text-align: left;">
                                         <thead>

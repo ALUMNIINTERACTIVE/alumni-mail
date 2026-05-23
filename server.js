@@ -170,6 +170,111 @@ function auditLog(action, sqlQuery, rawData = null) {
 }
 
 // -------------------------------------------------------------
+// L1 BLOCKCHAIN SMART CONTRACT HELPERS (Relayer & Resolver)
+// -------------------------------------------------------------
+const WALLET_FILE = path.join(__dirname, 'blockchain-temp', 'alumni-blockchain', 'alumni_node_wallet.json');
+
+function getRegistryAddress() {
+    const db = loadDB();
+    return process.env.ALUMNI_MAIL_REGISTRY_ADDRESS || db.contractAddress || "9e4e86b5fba2149708c545dec031c398c2fb54b62a246f194a9048c91ca3d003";
+}
+
+let cachedContractState = null;
+let lastCacheTime = 0;
+
+async function fetchContractState() {
+    const localRpcUrl = process.env.L1_RPC_URL || 'http://localhost:3001';
+    const publicRpcUrl = 'https://network.alumniinteractive.com';
+    const contractAddress = getRegistryAddress();
+    
+    if (cachedContractState && (Date.now() - lastCacheTime < 2000)) {
+        return cachedContractState;
+    }
+
+    // Try local RPC first
+    try {
+        const response = await fetch(`${localRpcUrl}/state/${contractAddress}`);
+        if (response.ok) {
+            const state = await response.json();
+            if (state && !state.error) {
+                cachedContractState = state;
+                lastCacheTime = Date.now();
+                return state;
+            }
+        }
+    } catch (e) {
+        console.warn("⚠️ Failed to fetch contract state from local L1 blockchain, trying public seeder...", e.message);
+    }
+
+    // Try public RPC as failover
+    try {
+        const response = await fetch(`${publicRpcUrl}/state/${contractAddress}`);
+        if (response.ok) {
+            const state = await response.json();
+            if (state && !state.error) {
+                cachedContractState = state;
+                lastCacheTime = Date.now();
+                return state;
+            }
+        }
+    } catch (e) {
+        console.error("❌ Failed to fetch contract state from both local and public L1 blockchain:", e.message);
+    }
+    return cachedContractState || { apps: {}, userKeys: {}, walletLinks: {}, calendarInvites: [] };
+}
+
+async function relayContractCall(method, args) {
+    const rpcUrl = process.env.L1_RPC_URL || 'http://localhost:3001';
+    const contractAddress = getRegistryAddress();
+
+    try {
+        if (!fs.existsSync(WALLET_FILE)) {
+            console.error(`❌ Relayer wallet not found at ${WALLET_FILE}`);
+            return null;
+        }
+        const walletKeys = JSON.parse(fs.readFileSync(WALLET_FILE, 'utf8'));
+        const fromAddress = walletKeys.publicKey;
+        const privateKey = walletKeys.privateKey;
+
+        const txPayload = {
+            privateKey: privateKey,
+            fromAddress: fromAddress,
+            toAddress: contractAddress,
+            amount: 0,
+            type: "CONTRACT_CALL",
+            payload: {
+                method: method,
+                args: args
+            }
+        };
+
+        const res = await fetch(`${rpcUrl}/transaction/sign-and-send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(txPayload)
+        });
+        const result = await res.json();
+        if (!res.ok) {
+            console.error("❌ Relayer contract call broadcast failed:", result.error);
+            return null;
+        }
+
+        // Propose a block immediately to mine it
+        await fetch(`${rpcUrl}/propose`, { method: 'POST' });
+        
+        cachedContractState = null;
+        lastCacheTime = 0;
+        
+        console.log(`✅ On-chain CONTRACT_CALL relayed successfully: ${method}`);
+        return result.hash;
+    } catch (e) {
+        console.error(`⚠️ Relayer contract call crash for ${method}:`, e.message);
+        return null;
+    }
+}
+
+
+// -------------------------------------------------------------
 // SMTP TRANSPORTER CONFIGURATION (Nodemailer)
 // -------------------------------------------------------------
 let transporter = null;
@@ -217,7 +322,7 @@ async function initSMTPTransporter() {
 // -------------------------------------------------------------
 // AUTHENTICATION ROUTES (Zero-Knowledge)
 // -------------------------------------------------------------
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
     const { username, authHash, salt, publicJwk, encPrivateKey } = req.body;
     const db = loadDB();
 
@@ -249,6 +354,13 @@ app.post('/api/auth/register', (req, res) => {
         `INSERT INTO users (username, auth_hash, salt, public_key, enc_private_key, tier) VALUES ('${normUser}', '${authHash.substring(0, 15)}...', '${salt}', '{JWK}', '{CIPHER}', '${resolvedTier}');`,
         { success: true }
     );
+
+    // Relay public key registration on the live custom L1 Blockchain
+    try {
+        await relayContractCall('registerPublicKey', { email: normUser, publicJwk });
+    } catch (blockchainErr) {
+        console.error("⚠️ Failed to relay public E2EE key to L1 chain:", blockchainErr.message);
+    }
 
     res.json({ success: true });
 });
@@ -493,23 +605,34 @@ app.post('/api/auth/webauthn/login-verify', (req, res) => {
     }
 });
 
-app.get('/api/keys/:username', (req, res) => {
+app.get('/api/keys/:username', async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     const normUser = req.params.username.toLowerCase().trim();
     const db = loadDB();
 
-    // Check primary users
+    // 1. Check on-chain smart contract state first
+    try {
+        const state = await fetchContractState();
+        if (state && state.userKeys && state.userKeys[normUser]) {
+            auditLog("SELECT", `SELECT public_key FROM L1_registry_userKeys WHERE email = '${normUser}';`, { found: true, source: "L1_blockchain" });
+            return res.json({ publicJwk: state.userKeys[normUser].publicJwk });
+        }
+    } catch (blockchainErr) {
+        console.error("⚠️ Failed to read E2EE key from on-chain state:", blockchainErr.message);
+    }
+
+    // 2. Fallback to primary local users
     let user = db.users[normUser];
     if (user) {
-        auditLog("SELECT", `SELECT public_key FROM users WHERE username = '${normUser}';`, { found: true });
+        auditLog("SELECT", `SELECT public_key FROM users WHERE username = '${normUser}';`, { found: true, source: "local_db" });
         return res.json({ publicJwk: user.publicJwk });
     }
 
-    // Check custom aliases
+    // 3. Fallback to custom local aliases
     let alias = db.aliases.find(a => a.email.toLowerCase() === normUser);
     if (alias) {
-        auditLog("SELECT", `SELECT public_key FROM aliases WHERE email = '${normUser}';`, { found: true });
+        auditLog("SELECT", `SELECT public_key FROM aliases WHERE email = '${normUser}';`, { found: true, source: "local_db" });
         return res.json({ publicJwk: alias.publicJwk });
     }
 
@@ -923,10 +1046,18 @@ function derivePublicKeyPEM(keyOrAddress) {
 function resolveRecipientAddress(recipient) {
     if (!recipient) return "";
     const clean = recipient.trim();
-    
-    // 1. Check if recipient is a registered email or alias in our db
-    const db = loadDB();
     const cleanLower = clean.toLowerCase();
+    
+    // 1. Check if recipient is mapped in on-chain cached smart contract state
+    if (cachedContractState && cachedContractState.walletLinks && cachedContractState.walletLinks[cleanLower]) {
+        const walletAddress = cachedContractState.walletLinks[cleanLower].walletAddress;
+        if (walletAddress) {
+            return derivePublicKeyPEM(walletAddress);
+        }
+    }
+
+    // 2. Check if recipient is a registered email or alias in our db
+    const db = loadDB();
     const userKeys = Object.keys(db.users);
     
     // Match directly by username or suffix split
@@ -973,7 +1104,7 @@ function resolveRecipientAddress(recipient) {
     return derivePublicKeyPEM(clean);
 }
 
-app.post('/api/v1/wallet/link', (req, res) => {
+app.post('/api/v1/wallet/link', async (req, res) => {
     const { username, walletTag } = req.body;
     if (!username) {
         return res.status(400).json({ error: "Missing username parameter." });
@@ -989,6 +1120,13 @@ app.post('/api/v1/wallet/link', (req, res) => {
     
     auditLog("UPDATE", `UPDATE users SET wallet_tag = ${walletTag ? `'${walletTag}'` : 'NULL'} WHERE username = '${normUser}';`);
     
+    // Relay email to wallet link on the live custom L1 Blockchain
+    try {
+        await relayContractCall('linkEmailToWallet', { email: normUser, walletTag: walletTag || '' });
+    } catch (blockchainErr) {
+        console.error("⚠️ Failed to relay email-to-wallet link to L1 chain:", blockchainErr.message);
+    }
+
     res.json({ success: true, walletTag: db.users[normUser].walletTag });
 });
 
@@ -1252,13 +1390,50 @@ app.post('/api/v1/subscription/upgrade', (req, res) => {
 // -------------------------------------------------------------
 // E2EE ENCRYPTED CALENDAR ENDPOINTS
 // -------------------------------------------------------------
-app.get('/api/v1/calendar/:username', (req, res) => {
+app.get('/api/v1/calendar/:username', async (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     const db = loadDB();
     const normUser = req.params.username.toLowerCase().trim();
 
-    const userMeetings = db.meetings.filter(m => m.username === normUser || (m.invitee && m.invitee.toLowerCase().trim() === normUser));
+    // 1. Get local meetings
+    let userMeetings = db.meetings.filter(m => m.username === normUser || (m.invitee && m.invitee.toLowerCase().trim() === normUser));
+
+    // 2. Fetch on-chain calendar invites
+    try {
+        const state = await fetchContractState();
+        if (state && state.calendarInvites) {
+            const onChainInvites = state.calendarInvites.filter(m => 
+                (m.invitee && m.invitee.toLowerCase().trim() === normUser) || 
+                (m.host && m.host.toLowerCase && m.host.toLowerCase().trim() === normUser)
+            );
+            
+            onChainInvites.forEach(m => {
+                if (!userMeetings.some(um => um.id === m.meetingId)) {
+                    userMeetings.push({
+                        id: m.meetingId,
+                        username: m.host || "unknown",
+                        encryptedTitle: m.hostEncTitle,
+                        encryptedDesc: m.hostEncDesc,
+                        date: m.date,
+                        time: m.time,
+                        ivTitle: m.hostIv,
+                        ivDesc: m.hostIv,
+                        wrappingKey: m.hostWrappingKey,
+                        invitee: m.invitee,
+                        inviteeEncTitle: m.inviteeEncTitle,
+                        inviteeEncDesc: m.inviteeEncDesc,
+                        inviteeIvTitle: m.inviteeIv,
+                        inviteeIvDesc: m.inviteeIv,
+                        inviteeWrappingKey: m.inviteeWrappingKey,
+                        source: "L1_blockchain"
+                    });
+                }
+            });
+        }
+    } catch (blockchainErr) {
+        console.error("⚠️ Failed to load E2EE calendar invites from L1 chain:", blockchainErr.message);
+    }
 
     auditLog(
         "SELECT",
@@ -1269,7 +1444,7 @@ app.get('/api/v1/calendar/:username', (req, res) => {
     res.json({ success: true, meetings: userMeetings });
 });
 
-app.post('/api/v1/calendar/add', (req, res) => {
+app.post('/api/v1/calendar/add', async (req, res) => {
     const { username, meeting } = req.body;
     const db = loadDB();
     const normUser = username.toLowerCase().trim();
@@ -1304,6 +1479,29 @@ app.post('/api/v1/calendar/add', (req, res) => {
         `INSERT INTO calendar_events (id, username, invitee, encrypted_title, event_date, event_time) VALUES ('${meeting.id}', '${normUser}', ${meeting.invitee ? `'${meeting.invitee}'` : 'NULL'}, '${meeting.encryptedTitle.substring(0, 15)}...', '${meeting.date}', '${meeting.time}');`,
         { meetingId: meeting.id }
     );
+
+    // Relay calendar invitation to the live custom L1 Blockchain
+    if (meeting.invitee) {
+        try {
+            const blockchainInvite = {
+                meetingId: meeting.id,
+                date: meeting.date,
+                time: meeting.time,
+                hostEncTitle: meeting.encryptedTitle,
+                hostEncDesc: meeting.encryptedDesc,
+                hostWrappingKey: meeting.wrappingKey,
+                hostIv: meeting.ivTitle || meeting.ivDesc || "",
+                invitee: meeting.invitee.toLowerCase().trim(),
+                inviteeEncTitle: meeting.inviteeEncTitle || "",
+                inviteeEncDesc: meeting.inviteeEncDesc || "",
+                inviteeWrappingKey: meeting.inviteeWrappingKey || "",
+                inviteeIv: meeting.inviteeIvTitle || meeting.inviteeIvDesc || ""
+            };
+            await relayContractCall('storeCalendarInvite', blockchainInvite);
+        } catch (blockchainErr) {
+            console.error("⚠️ Failed to relay E2EE calendar invite to L1 chain:", blockchainErr.message);
+        }
+    }
 
     res.json({ success: true });
 });
@@ -1766,6 +1964,97 @@ app.post('/api/v1/twilio/make-call', async (req, res) => {
     } catch (e) {
         console.error('[TWILIO MAKE CALL ERROR]', e);
         res.status(500).json({ error: e.message });
+    }
+});
+
+// -------------------------------------------------------------
+// ALUMNI L1 BLOCKCHAIN RPC ENDPOINTS
+// -------------------------------------------------------------
+app.get('/api/v1/blockchain/status', async (req, res) => {
+    const localRpcUrl = process.env.L1_RPC_URL || 'http://localhost:3001';
+    const publicRpcUrl = 'https://network.alumniinteractive.com';
+    const contractAddress = getRegistryAddress();
+    
+    // Dynamically determine the client-facing RPC URL based on access host
+    const host = req.get('host') || '';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+    const clientRpcUrl = isLocalhost ? localRpcUrl : publicRpcUrl;
+
+    // Try local node first
+    try {
+        const blocksRes = await fetch(`${localRpcUrl}/blocks`);
+        if (blocksRes.ok) {
+            const blocks = await blocksRes.json();
+            return res.json({
+                connected: true,
+                blockHeight: blocks.length,
+                rpcUrl: clientRpcUrl,
+                contractAddress: contractAddress
+            });
+        }
+    } catch (err) {
+        console.warn("⚠️ Local validator status check failed, attempting public seeder...", err.message);
+    }
+
+    // Try public network seeder
+    try {
+        const blocksRes = await fetch(`${publicRpcUrl}/blocks`);
+        if (blocksRes.ok) {
+            const blocks = await blocksRes.json();
+            return res.json({
+                connected: true,
+                blockHeight: blocks.length,
+                rpcUrl: publicRpcUrl,
+                contractAddress: contractAddress
+            });
+        }
+    } catch (err) {
+        console.error("❌ Both local and public validator nodes are offline:", err.message);
+    }
+
+    // Completely offline fallback
+    res.json({
+        connected: false,
+        blockHeight: 0,
+        rpcUrl: clientRpcUrl,
+        contractAddress: contractAddress,
+        error: "All validator networks offline"
+    });
+});
+
+app.get('/api/v1/blockchain/blocks', async (req, res) => {
+    const localRpcUrl = process.env.L1_RPC_URL || 'http://localhost:3001';
+    const publicRpcUrl = 'https://network.alumniinteractive.com';
+    
+    // Try local node blocks first
+    try {
+        const blocksRes = await fetch(`${localRpcUrl}/blocks`);
+        if (blocksRes.ok) {
+            const blocks = await blocksRes.json();
+            return res.json(blocks);
+        }
+    } catch (err) {
+        console.warn("⚠️ Failed to fetch blocks from local L1 node, checking public seeder...", err.message);
+    }
+
+    // Try public network seeder
+    try {
+        const blocksRes = await fetch(`${publicRpcUrl}/blocks`);
+        if (blocksRes.ok) {
+            const blocks = await blocksRes.json();
+            return res.json(blocks);
+        }
+    } catch (err) {
+        res.status(502).json({ error: `Failed to fetch blocks from both local and public L1 nodes: ${err.message}` });
+    }
+});
+
+app.get('/api/v1/blockchain/state/:contractAddress', async (req, res) => {
+    try {
+        const state = await fetchContractState();
+        res.json(state);
+    } catch (err) {
+        res.status(502).json({ error: `Failed to resolve smart contract state: ${err.message}` });
     }
 });
 
