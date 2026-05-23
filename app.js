@@ -3151,6 +3151,10 @@ async function initiateWebRTCCall(callType, customPeer) {
                         }
                         stream = remoteAudio.srcObject;
                         stream.addTrack(event.track);
+                        
+                        // Force refresh srcObject to trigger browser to play audio
+                        remoteAudio.srcObject = null;
+                        remoteAudio.srcObject = stream;
                     } else {
                         if (remoteAudio.srcObject !== stream) {
                             remoteAudio.srcObject = stream;
@@ -3170,6 +3174,10 @@ async function initiateWebRTCCall(callType, customPeer) {
                         }
                         stream = remoteVideo.srcObject;
                         stream.addTrack(event.track);
+                        
+                        // Force refresh srcObject to trigger browser to play video
+                        remoteVideo.srcObject = null;
+                        remoteVideo.srcObject = stream;
                     } else {
                         if (remoteVideo.srcObject !== stream) {
                             remoteVideo.srcObject = stream;
@@ -3364,6 +3372,10 @@ async function acceptCall() {
                         }
                         stream = remoteAudio.srcObject;
                         stream.addTrack(event.track);
+                        
+                        // Force refresh srcObject to trigger browser to play audio
+                        remoteAudio.srcObject = null;
+                        remoteAudio.srcObject = stream;
                     } else {
                         if (remoteAudio.srcObject !== stream) {
                             remoteAudio.srcObject = stream;
@@ -3383,6 +3395,10 @@ async function acceptCall() {
                         }
                         stream = remoteVideo.srcObject;
                         stream.addTrack(event.track);
+                        
+                        // Force refresh srcObject to trigger browser to play video
+                        remoteVideo.srcObject = null;
+                        remoteVideo.srcObject = stream;
                     } else {
                         if (remoteVideo.srcObject !== stream) {
                             remoteVideo.srcObject = stream;
@@ -5405,5 +5421,14 @@ async function runIntegrityScan() {
 // Expose globally
 window.renderRegistryView = renderRegistryView;
 window.runIntegrityScan = runIntegrityScan;
+
+// Global catch-all click listener to ensure that if browser blocked WebRTC remote audio autoplay,
+// any subsequent user click on the document immediately triggers audio playback!
+document.addEventListener('click', () => {
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio && remoteAudio.srcObject && remoteAudio.paused) {
+        remoteAudio.play().catch(err => console.warn("[WEBRTC] Failed to play remote audio on subsequent user click:", err));
+    }
+});
 
 
